@@ -5,6 +5,8 @@ import java.util.Arrays;
 
 /**
  * Convex hull made easy
+ * 
+ * Adapted from USACO training pages
  * @author Lewin
  */
 public class Convex_hull {

@@ -3,6 +3,9 @@
  * exactly 1 of 2 uses:
  * a) range query, point update
  * b) range update, point query
+ * 
+ * For more info, see:
+ * http://community.topcoder.com/tc?module=Static&d1=tutorials&d2=binaryIndexedTrees
  * @author Lewin
  */
 public class Binary_Indexed_Trees {
