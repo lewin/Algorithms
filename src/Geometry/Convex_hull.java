@@ -86,23 +86,4 @@ public class Convex_hull {
         Point bc = new Point (b.x - c.x, b.y - c.y);
         return zCrossProduct (ab, bc);
     }
-    
-    static class Point implements Comparable <Point> {
-        public double   x, y, angle;
-        
-        public Point (double x, double y) {
-            this.x = x;
-            this.y = y;
-            angle = 0;
-        }
-        
-        public int compareTo (Point other) {
-            double test = angle - other.angle;
-            if (test < -EPS)
-                return -1;
-            if (test > EPS)
-                return 1;
-            return 0;
-        }
-    }
 }
