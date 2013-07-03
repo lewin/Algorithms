@@ -1,6 +1,11 @@
 package Matrix;
 
-public class Matrix {
+/**
+ * Operations on matrices
+ * @author Lewin
+ *
+ */
+public class MatrixOperations {
     private static int mod;
     
     private static int [][] mat_exp (int [][] A, int e) {

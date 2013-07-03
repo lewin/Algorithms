@@ -1,5 +1,10 @@
 package Matrix;
 
+/**
+ * Row reduce function
+ * @author Lewin
+ *
+ */
 public class RowReduce {
     private static void rref (double [][] M) {
         int row = M.length;

@@ -2,6 +2,11 @@ package Geometry;
 
 import static Geometry.Utils.*;
 
+/**
+ * Representation of a Segment
+ * @author Lewin
+ *
+ */
 public class Segment {
     public Point    a, b;
     public double   length;

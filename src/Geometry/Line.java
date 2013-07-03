@@ -1,7 +1,11 @@
 package Geometry;
 
 import static Geometry.Utils.*;
-
+/**
+ * Representation of a Line
+ * @author Lewin
+ *
+ */
 public class Line {
     public double   a, b, c;
     

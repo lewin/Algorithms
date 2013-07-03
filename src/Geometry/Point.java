@@ -3,6 +3,11 @@ package Geometry;
 import java.util.*;
 import static Geometry.Utils.*;
 
+/**
+ * Representation of a Point
+ * @author Lewin
+ *
+ */
 public class Point implements Comparable <Point> {
     public double   x, y, angle;
     

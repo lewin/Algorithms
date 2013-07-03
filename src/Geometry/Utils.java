@@ -1,5 +1,10 @@
 package Geometry;
 
+/**
+ * Useful functions 
+ * @author Lewin
+ * 
+ */
 public class Utils {
     public static final double  EPS = 1e-9;
     public static final int     INF = Integer.MAX_VALUE >> 2;
