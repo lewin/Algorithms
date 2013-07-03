@@ -3,10 +3,18 @@ package Geometry;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.TreeSet;
-
+/**
+ * O (n log n) for finding pair of closest points within a set
+ * @author Lewin
+ *
+ */
 public class ClosestPair {
     private static State closestPair(Point[] points) {
-        Arrays.sort (points);
+        Arrays.sort (points, new Comparator <Point> () {
+            public int compare (Point a, Point b) {
+                return (int)Math.signum (a.x - b.x);
+            }
+        });
         double min = 1e9;
         int p1 = -1, p2 = -1;
         int left = 0;
