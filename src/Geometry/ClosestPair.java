@@ -10,11 +10,7 @@ import java.util.TreeSet;
  */
 public class ClosestPair {
     private static State closestPair(Point[] points) {
-        Arrays.sort (points, new Comparator <Point> () {
-            public int compare (Point a, Point b) {
-                return (int)Math.signum (a.x - b.x);
-            }
-        });
+        Arrays.sort (points);
         double min = 1e9;
         int p1 = -1, p2 = -1;
         int left = 0;

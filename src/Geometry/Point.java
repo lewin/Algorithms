@@ -25,11 +25,6 @@ public class Point implements Comparable <Point> {
     }
     
     public int compareTo (Point other) {
-        double test = angle - other.angle;
-        if (test < -EPS)
-            return -1;
-        if (test > EPS)
-            return 1;
-        return 0;
+        return x == other.x ? (int)Math.signum (y - other.y) : (int)Math.signum (x - other.x);
     }
 }

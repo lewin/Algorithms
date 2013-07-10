@@ -1,6 +1,9 @@
 package Geometry;
 
+import static Geometry.Utils.EPS;
+
 import java.util.Arrays;
+import java.util.Comparator;
 
 
 /**
@@ -9,7 +12,7 @@ import java.util.Arrays;
  * Adapted from USACO training pages
  * @author Lewin
  */
-public class Convex_hull {
+public class ConvexHull {
     public static final double  EPS = 0.0000000001;
     
     /**
@@ -33,7 +36,11 @@ public class Convex_hull {
         for (int i = 0; i < numPoints; i++)
             p[i].angle = Math.atan2 (p[i].y - m.y, p[i].x - m.x);
         
-        Arrays.sort (p);
+        Arrays.sort (p, new Comparator<Point> () {
+            public int compare (Point a, Point b) {
+                return (int)Math.signum (a.angle - b.angle);
+            }
+        });
         
         Point [] hull = new Point [numPoints];
         hull[0] = p[0];
