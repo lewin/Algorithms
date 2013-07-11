@@ -23,6 +23,11 @@ public class Utils {
         return ab.x * ac.y - ab.y * ac.x;
     }
     
+    // returns if a,b,c are colinear
+    public static boolean colinear (Point a, Point b, Point c) {
+        return (a.x - b.x) * (a.y - c.y) == (a.x - c.x) * (a.y - b.y);
+    }
+    
     // returns distance between points a, and b
     public static double distance (Point a, Point b) {
         return Math.hypot(a.x - b.x, a.y - b.y);

@@ -35,7 +35,7 @@ public class Circle {
             db2 -= db1 * da2 / da1;
             dc2 -= dc1 * da2 / da1;
             y = dc2 / db2;
-            x = (dc1 - db2 * y) / da1;
+            x = (dc1 - db1 * y) / da1;
         }
         p = new Point (x, y);
         r = distance (p, a);
