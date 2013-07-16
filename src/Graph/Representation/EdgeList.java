@@ -10,12 +10,12 @@ public class EdgeList implements Graph {
         }
     }
     
-    public int M;
-    public Edge [] edges;
-    private int idx;
+    public static int N, M, idx;
+    public static Edge [] edges;
 
     @Override
     public void init(int N, int M) {
+        this.N = N;
         this.M = M;
         edges = new Edge [M];
         idx = 0;

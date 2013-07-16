@@ -6,8 +6,9 @@ package Graph.Representation;
  *
  */
 public class LinkedList implements Graph {
-    private static int []   eadj, elast, eprev, ecost;
-    private static int      eidx, N, M;
+    public static int []   eadj, elast, eprev, ecost;
+    public static int      eidx;
+    public static int N, M;
     
     @Override
     public void init (int N, int M) {

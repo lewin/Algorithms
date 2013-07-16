@@ -1,3 +1,4 @@
+package Trees;
 /**
  * Given a list of N numbers in a row, we can use this structure for
  * exactly 1 of 2 uses:
@@ -8,7 +9,7 @@
  * http://community.topcoder.com/tc?module=Static&d1=tutorials&d2=binaryIndexedTrees
  * @author Lewin
  */
-public class Binary_Indexed_Trees {
+public class BinaryIndexedTrees {
     private static int []   tree;
     private static int      N;
     

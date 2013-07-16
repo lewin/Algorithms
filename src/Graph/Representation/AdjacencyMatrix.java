@@ -1,8 +1,13 @@
 package Graph.Representation;
 
+/**
+ * 
+ * @author Lewin
+ *
+ */
 public class AdjacencyMatrix implements Graph {
-    public int N;
-    public int [][] grid;
+    public static int N;
+    public static int [][] grid;
     
     @Override
     public void init(int N, int M) {
