@@ -9,7 +9,7 @@ import static NumberTheory.PrimeSieve.*;
 
 public class Utils {
     // Euler's Totient Function
-    private static long phi (long n) {// make sure to generate primes
+    public static long phi (long n) {// make sure to generate primes
         long temp = n;
         for (int i = 0; prime [i] * prime [i] <= temp && i < idx; i++)
             if (temp % prime [i] == 0) {
@@ -21,7 +21,7 @@ public class Utils {
     }
     
     // N choose K
-    private static long comb (int n, int k) {
+    public static long comb (int n, int k) {
         int a = Math.min (k, n - k);
         long res = 1;
         for (int i = 1; i <= a; i++) {
@@ -31,8 +31,19 @@ public class Utils {
     }
     
     // Greatest Common Divisor
-    private static long gcd (long x, long y) {
+    public static long gcd (long x, long y) {
         for (; x != 0; x ^= y, y ^= x, x ^= y, x %= y);
         return y;
+    }
+    
+    // Inverse of N mod M;
+    public static long inv (long N, long M) {
+        long x = 0, lastx = 1, y = 1, lasty = 0, q, t, a = N, b = M;
+        while (b != 0) {
+            q = a / b; t = a % b; a = b; b = t;
+            t = x; x = lastx - q * x; lastx = t;
+            t = y; y = lasty - q * y; lasty = t;
+        }
+        return (lastx + M) % M;
     }
 }

@@ -7,7 +7,7 @@ package NumberTheory;
  *
  */
 public class SafeArithmetic {
-    private static long mod_mult (long x, long y, long p) {
+    public static long mod_mult (long x, long y, long p) {
         if (x == 0 || y == 0) return 0;
         long a = x, b = y, c = 0;
         while (a > 0) {
@@ -18,7 +18,7 @@ public class SafeArithmetic {
         return c;
     }
     
-    private static long mod_exp (long b, long e, long mod) {
+    public static long mod_exp (long b, long e, long mod) {
         if (b == 0 || b == 1) return b;
         long res = 1;
         while (e > 0) {
