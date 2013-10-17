@@ -1,7 +1,5 @@
 package Matrix;
 
-import java.util.Arrays;
-
 public class MatrixInverse {
     
     // square matrix
