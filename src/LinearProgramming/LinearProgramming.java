@@ -1,5 +1,5 @@
+package LinearProgramming;
 import java.util.Arrays;
-
 
 public class LinearProgramming {
     public static final double EPS = 1e-9;

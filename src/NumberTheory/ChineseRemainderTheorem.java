@@ -34,8 +34,8 @@ public class ChineseRemainderTheorem {
         long s = m, t = n, v = 1, u = 0, lastv = 0, lastu = 1, temp, q, r;
         do {
             q = s / t; r = s - t * q; s = t; t = r;
-            temp = u; u = u * u + lastu; lastu = temp;
-            temp = v; v = v * q + lastv; lastv = temp;
+            temp = u; u = lastu - u * q; lastu = temp;
+            temp = v; v = lastv - v * q; lastv = temp;
         } while (r != 0);
         a = (a * lastv * n) % (m * n);
         b = (b * lastu * m) % (m * n);
