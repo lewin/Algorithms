@@ -24,3 +24,4 @@
 *.synctex.gz
 *.toc
 *.vrb
+/bin
