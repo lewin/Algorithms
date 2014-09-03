@@ -1,131 +1,237 @@
 package Trees;
 
 import java.util.Arrays;
-import java.util.HashMap;
 
 public class HeavyLightTree {
-private static int N;
-    private static LazyIntervalTree root;
+  public static int MAXN = 10000;
+  static {
+    size = new int[MAXN];
+    cp = new int[MAXN];
+    depth = new int[MAXN];
+    anc = new int[15][MAXN];
+    bestchild = new int[MAXN];
+    whchain = new int[MAXN];
+    chainhead = new int[MAXN];
+    index = new int[MAXN];
+    chains = new int[MAXN];
+    emp = new Edge[MAXN];
+    g = new Graph (MAXN, MAXN - 1);
+  }
+
+  static class Graph {
+    public int[] eadj, eprev, elast, ecost;
+    public int eidx;
+
+    public Graph(int N, int M) {
+      eadj = new int[2 * M];
+      eprev = new int[2 * M];
+      ecost = new int[2 * M];
+      elast = new int[N];
+      reset();
+    }
     
-    static class Pair {
-        public int a, b;
-        public Pair (int a, int b) {
-            this.a = a; this.b = b;
-        }
-        
-        @Override
-        public boolean equals (Object other) {
-            if (!(other instanceof Pair)) return false;
-            return ((Pair)other).a == this.a && ((Pair)other).b == this.b;
-        }
+    public void reset() {
+      Arrays.fill (elast, -1);
+      eidx = 0;
     }
 
-    private static HashMap<Pair, Integer> mp;
-    
-    // call before everything
-    private static void init (int K) {
-        N = K;
-        eadj = new int [2 * N];
-        elast = new int [N];
-        eprev = new int [2 * N];
-        ecost = new int [2 * N];
-        eidx = 0;
-        Arrays.fill (elast, -1);
-        mp = new HashMap<Pair, Integer> ();
+    public void addEdge(int a, int b, int c) {
+      eadj[eidx] = b;
+      ecost[eidx] = c;
+      eprev[eidx] = elast[a];
+      elast[a] = eidx++;
+      eadj[eidx] = a;
+      ecost[eidx] = c;
+      eprev[eidx] = elast[b];
+      elast[b] = eidx++;
     }
-    
-    // call after adding all the edges
-    private static void init2 () {
-        makeCs();
-        root = new LazyIntervalTree (0, N - 1);
+  }
+
+  static class Edge {
+    public int a, b;
+
+    public Edge(int a, int b) {
+      this.a = a;
+      this.b = b;
     }
-    
-    private static int [] eadj, elast, eprev, ecost;
-    private static int eidx;
-    
-    private static void addEdge (int a, int b, int c) {
-        eadj [eidx] = b; ecost [eidx] = c; eprev [eidx] = elast [a]; elast [a] = eidx++;
-        eadj [eidx] = a; ecost [eidx] = c; eprev [eidx] = elast [b]; elast [b] = eidx++;
-        mp.put (new Pair (a, b), c);
-        mp.put (new Pair (b, a), c);
+
+    @Override
+    public int hashCode() {
+      return a * 10000 + b;
     }
-    
-    // trace heavy edge back up, -1 if no heavy edge
-    // cs order heavy paths next to each other
-    // pos position of vertex in cs
-    private static int [] numChild, depth, trace, cs, pos, endSeg;
-    private static int [][] par;
-    
-    private static void dfs (int u) {
-        numChild [u] = 1;
-        int t = -1;
-        for (int e = elast [u]; e != -1; e = eprev [e]) {
-            int v = eadj [e];
-            if (numChild [v] == 0) {
-                par [v][0] = u;
-                depth [v] = depth [u] + 1;
-                dfs (v);
-                numChild [u] += numChild [v];
-                if (t == -1 || numChild [t] < numChild [v])
-                    t = v;
-            }
-        }
-        trace [t] = u;
+
+    @Override
+    public boolean equals(Object other) {
+      if (!(other instanceof Edge))
+        return false;
+      return ((Edge) other).a == a && ((Edge) other).b == b;
     }
-    
-    private static void makeCs() {
-        int idx = 0;
-        dfs(0);
-        for (int i = 1; i < 20; i++) {
-            for (int u = 0; u < N; u++)
-                par [i][u] = par [i - 1][par [i - 1][u]];
-        }
-        
-        for (int i = 0; i < N; i++) {
-            if (numChild [i] == 1) { // leaf
-                int u = i;
-                do {
-                    cs [idx++] = u;
-                    u = trace [u];
-                } while (u != -1);
-                u = i;
-                do {
-                    endSeg [u] = cs [idx - 1];
-                    u = trace [u];
-                } while (u != -1);
-            }
-        }
-        
-        for (int i = 0; i < idx; i++)
-            pos [cs [i]] = i;
+  }
+
+  public static int[] arr;
+
+  static class SegmentTree {
+    public int start, end, max;
+    public SegmentTree left, right;
+
+    public SegmentTree(int start, int end) {
+      this.start = start;
+      this.end = end;
+      if (start == end) {
+        max = arr[start];
+      } else {
+        int mid = (start + end) >> 1;
+        left = new SegmentTree(start, mid);
+        right = new SegmentTree(mid + 1, end);
+        max = Math.max(left.max, right.max);
+      }
     }
-    
-    private static int lca (int a, int b) {
-        if (depth[a] < depth[b]) {
-            a ^= b;
-            b ^= a;
-            a ^= b;
-        }
-        
-        int diff = depth[a] - depth[b];
-        for (int i = 0; 1 << i <= diff; i++)
-            if (((diff) & 1 << i) != 0)
-                a = par[i][a];
-        
-        if (a == b)
-            return a;
-        
-        int log = 0;
-        while (1 << (log + 1) <= depth[a])
-            log++;
-        
-        // another binary search
-        for (int i = log; i >= 0; i--)
-            if (par[i][a] != par[i][b]) {
-                a = par[i][a];
-                b = par[i][b];
-            }
-        
-        return par[0][a];
+
+    public void update(int pos, int val) {
+      if (start == pos && end == pos) {
+        max = val;
+        return;
+      }
+      int mid = (start + end) >> 1;
+      if (mid >= pos)
+        left.update(pos, val);
+      else
+        right.update(pos, val);
+      max = Math.max(left.max, right.max);
     }
+
+    public int query(int s, int e) {
+      if (start == s && end == e) {
+        return max;
+      }
+      int mid = (start + end) >> 1;
+      if (mid >= e)
+        return left.query(s, e);
+      else if (mid < s)
+        return right.query(s, e);
+      else
+        return Math.max(left.query(s, mid), right.query(mid + 1, e));
+    }
+  }
+
+  public static int N;
+  public static Graph g;
+  public static Edge[] emp;
+
+  public static int[] size, cp, depth;
+  public static int[][] anc;
+  public static int[] bestchild;
+
+  public static int dfs0(int node, int par) {
+    anc[0][node] = par;
+    depth[node] = par == -1 ? 0 : depth[par] + 1;
+    size[node] = 1;
+    bestchild[node] = -1;
+    int max = 0;
+    for (int e = g.elast[node]; e != -1; e = g.eprev[e]) {
+      int next = g.eadj[e];
+      if (next == par)
+        continue;
+      cp[next] = g.ecost[e];
+      int sizen = dfs0(next, node);
+      if (sizen > max) {
+        max = sizen;
+        bestchild[node] = next;
+      }
+      size[node] += sizen;
+    }
+    return size[node];
+  }
+
+  public static int[] whchain, chainhead, index, chains;
+  public static int cidx, widx;
+
+  public static void dfs1(int node, int par) {
+    whchain[node] = widx;
+    index[node] = cidx;
+    chains[cidx++] = node;
+    
+    if (bestchild[node] == -1)
+      return;
+    dfs1(bestchild[node], node);
+    for (int e = g.elast[node]; e != -1; e = g.eprev[e]) {
+      int next = g.eadj[e];
+      if (next == par || next == bestchild[node])
+        continue;
+      widx++;
+      chainhead[widx] = next;
+      dfs1(next, node);
+    }
+  }
+
+  public static SegmentTree root;
+  public static void init() {
+    dfs0(0, -1);
+    for (int i = 1; i < 15; i++) {
+      for (int j = 0; j < N; j++) {
+        anc[i][j] = anc[i - 1][j] == -1 ? -1 : anc[i - 1][anc[i - 1][j]];
+      }
+    }
+    chainhead[0] = 0;
+    widx = 0;
+    cidx = 0;
+    dfs1(0, -1);
+    arr = new int[cidx];
+    for (int i = 0; i < cidx; i++)
+      arr[i] = cp[chains[i]];
+    root = new SegmentTree(0, cidx - 1);
+  }
+
+  public static int lca(int a, int b) {
+    if (depth[a] < depth[b]) {
+      a ^= b;
+      b ^= a;
+      a ^= b;
+    }
+
+    int diff = depth[a] - depth[b];
+    for (int i = 0; i < anc.length && diff > 0; i++, diff >>= 1)
+      if ((diff & 1) != 0)
+        a = anc[i][a];
+
+    if (a == b)
+      return a;
+
+    for (int i = anc.length - 1; i >= 0; i--)
+      if (anc[i][a] != anc[i][b]) {
+        a = anc[i][a];
+        b = anc[i][b];
+      }
+
+    return anc[0][a];
+  }
+
+  public static int query_up(int a, int b) {
+    // a is an ancestor of b
+    int achain = whchain[a], bchain = whchain[b];
+    int ans = 0;
+    while (achain != bchain) { // try to get them on the same chain
+      if (b != chainhead[bchain])
+        ans = Math.max(ans, root.query(index[chainhead[bchain]], index[b]));
+      b = anc[0][chainhead[bchain]];
+      bchain = whchain[b];
+    }
+    if (a != b)
+      ans = Math.max(ans, root.query(index[a] + 1, index[b]));
+    return ans;
+  }
+
+  public static int query(int a, int b) {
+    int lca = lca(a, b);
+    return Math.max(query_up(lca, a), query_up(lca, b));
+  }
+
+  public static void update(int x, int c) {
+    Edge e = emp[x];
+    int a = e.a, b = e.b;
+    if (depth[a] < depth[b]) {
+      int t = a; a = b; b = t;
+    }
+    root.update(index[b], c);
+  }
 }
