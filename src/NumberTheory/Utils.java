@@ -1,6 +1,8 @@
 package NumberTheory;
 
 import static NumberTheory.PrimeSieve.*;
+
+import java.util.ArrayList;
 /**
  * Collection of common operations
  * @author Lewin
@@ -45,5 +47,19 @@ public class Utils {
             t = y; y = lasty - q * y; lasty = t;
         }
         return (lastx + M) % M;
+    }
+    
+    // Chinese Remainder Theorem
+    // all mods are pairwise coprime
+    public static long CRT(long[] vals, long[] mods) {
+      long prodall = 1;
+      for (long j : mods) prodall *= j;
+      
+      long ret = 0;
+      for (int i = 0; i < vals.length; i++) {
+        long ni = mods[i], ai = vals[i];
+        ret = (ret + ai * prodall / ni % prodall * inv(prodall / ni % ni, ni)) % prodall;
+      }
+      return ret;
     }
 }

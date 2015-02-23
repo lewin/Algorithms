@@ -3,6 +3,7 @@ package Misc;
 import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 
 public class FastIO {
   static class Reader {
@@ -11,6 +12,7 @@ public class FastIO {
     private byte[] buffer;
     private int bufferPointer, bytesRead;
 
+    
     public Reader() {
       din = new DataInputStream(System.in);
       buffer = new byte[BUFFER_SIZE];
@@ -19,6 +21,12 @@ public class FastIO {
 
     public Reader(String file_name) throws IOException {
       din = new DataInputStream(new FileInputStream(file_name));
+      buffer = new byte[BUFFER_SIZE];
+      bufferPointer = bytesRead = 0;
+    }
+    
+    public Reader(InputStream in) throws IOException {
+      din = new DataInputStream(in);
       buffer = new byte[BUFFER_SIZE];
       bufferPointer = bytesRead = 0;
     }

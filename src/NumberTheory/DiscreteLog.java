@@ -8,7 +8,7 @@ import static NumberTheory.SafeArithmetic.mod_exp;
 public class DiscreteLog {
     // gcd (g, mod) = 1
     public static long discreteLog (long g, long gn, long mod) {
-        long m = (long)Math.ceil (mod);
+        long m = (long)Math.ceil(Math.sqrt(mod));
         HashMap<Long, Long> mp = new HashMap <Long, Long>();
         long cur = 1;
         for (int i = 0; i < m; i++) {

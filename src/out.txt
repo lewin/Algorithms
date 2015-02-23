@@ -1,0 +1,3245 @@
+package Algebra;
+
+public class FastFourierTransform {
+    private Complex [] fft(Complex [] x) {
+        int N = x.length;
+        
+        if (N == 1) return new Complex [] {x[0]};
+        Complex [] arr = new Complex [N >> 1];
+        for (int i = 0; i < N / 2; i++)
+            arr [i] = x [2 * i];
+        Complex [] even = fft (arr);
+        
+        for (int i = 0; i < N / 2; i++)
+            arr [i] = x [2 * i + 1];
+        Complex [] odd = fft(arr);
+        
+        Complex [] ret = new Complex [N];
+        for (int i = 0; i < N / 2; i++) {
+            double ang = -2 * i * Math.PI / N;
+            Complex ai = new Complex(Math.cos(ang), Math.sin(ang)).multiply(odd[i]);
+            ret[i] = even[i].add(ai);
+            ret[i + N / 2] = even[i].subtract(ai);
+        }
+        
+        return ret;
+    }
+    
+    public Complex [] ifft (Complex [] x) {
+        int N = x.length;
+        Complex [] ret = new Complex [N];
+        for (int i = 0; i < N; i++)
+            ret [i] = x[i].conjugate();
+        ret = fft(ret);
+        for (int i = 0; i < N; i++)
+            ret [i] = ret[i].conjugate().multiply(1. / N);
+        return ret;
+    }
+    
+    // performs circular convolution
+    public Complex[] circonv (Complex [] x, Complex [] y) {
+        int N = x.length;
+        Complex [] a = fft(x), b = fft(y);
+        for (int i = 0; i < N; i++)
+            a[i] = a[i].multiply(b[i]);
+        return ifft(a);
+    }
+    
+    // performs linear convolution of x,y
+    public Complex[] conv (Complex [] x, Complex [] y) {
+        int N = x.length;
+        Complex [] a = new Complex [2 * N],
+                   b = new Complex [2 * N];
+        for (int i = 0; i < N; i++) {
+            a[i] = x[i];
+            a[i + N] = Complex.ZERO;
+            
+            b[i] = y[i];
+            b[i + N] = Complex.ZERO;
+        }
+        return circonv (a, b);
+    }
+}
+package Algebra;
+
+public class GeneralFFT {
+  // below FFT code very slightly modified from
+  // http://nayuki.eigenstate.org/res/free-small-fft-in-multiple-languages/Fft.java
+  /*
+   * Computes the discrete Fourier transform (DFT) of the given complex vector, storing the result
+   * back into the vector. The vector can have any length. This is a wrapper function.
+   */
+  public static void transform(double[] real, double[] imag) {
+    if (real.length != imag.length)
+      throw new IllegalArgumentException("Mismatched lengths");
+
+    int n = real.length;
+    if (n == 0)
+      return;
+    else if ((n & (n - 1)) == 0) // Is power of 2
+      transformRadix2(real, imag);
+    else
+      // More complicated algorithm for aribtrary sizes
+      transformBluestein(real, imag);
+  }
+
+
+  /*
+   * Computes the inverse discrete Fourier transform (IDFT) of the given complex vector, storing the
+   * result back into the vector. The vector can have any length. This is a wrapper function. This
+   * transform does not perform scaling, so the inverse is not a true inverse.
+   */
+  public static void inverseTransform(double[] real, double[] imag) {
+    transform(imag, real);
+  }
+
+  /*
+   * Computes the discrete Fourier transform (DFT) of the given complex vector, storing the result
+   * back into the vector. The vector's length must be a power of 2. Uses the Cooley-Tukey
+   * decimation-in-time radix-2 algorithm.
+   */
+  public static void transformRadix2(double[] real, double[] imag) {
+    // Initialization
+    if (real.length != imag.length)
+      throw new IllegalArgumentException("Mismatched lengths");
+    int n = real.length;
+    if (n <= 1)
+      return;
+    int levels = -1;
+    for (int i = 0; i < 32; i++) {
+      if (1 << i == n)
+        levels = i; // Equal to log2(n)
+    }
+    if (levels == -1)
+      throw new IllegalArgumentException("Length is not a power of 2");
+    double[] cosTable = new double[n / 2];
+    double[] sinTable = new double[n / 2];
+    cosTable[0] = 1;
+    sinTable[0] = 0;
+    double qc = Math.cos(2 * Math.PI / n), qs = Math.sin(2 * Math.PI / n);
+    for (int i = 1; i < n / 2; i++) {
+      cosTable[i] = cosTable[i - 1] * qc - sinTable[i - 1] * qs;
+      sinTable[i] = sinTable[i - 1] * qc + cosTable[i - 1] * qs;
+    }
+
+    // Bit-reversed addressing permutation
+    for (int i = 0; i < n; i++) {
+      int j = Integer.reverse(i) >>> (32 - levels);
+      if (j > i) {
+        double temp = real[i];
+        real[i] = real[j];
+        real[j] = temp;
+        temp = imag[i];
+        imag[i] = imag[j];
+        imag[j] = temp;
+      }
+    }
+
+    // Cooley-Tukey decimation-in-time radix-2 FFT
+    for (int size = 2; size <= n; size *= 2) {
+      int halfsize = size / 2;
+      int tablestep = n / size;
+      for (int i = 0; i < n; i += size) {
+        for (int j = i, k = 0; j < i + halfsize; j++, k += tablestep) {
+          double tpre = real[j + halfsize] * cosTable[k] + imag[j + halfsize] * sinTable[k];
+          double tpim = -real[j + halfsize] * sinTable[k] + imag[j + halfsize] * cosTable[k];
+          real[j + halfsize] = real[j] - tpre;
+          imag[j + halfsize] = imag[j] - tpim;
+          real[j] += tpre;
+          imag[j] += tpim;
+        }
+      }
+    }
+  }
+
+
+  /*
+   * Computes the discrete Fourier transform (DFT) of the given complex vector, storing the result
+   * back into the vector. The vector can have any length. This requires the convolution function,
+   * which in turn requires the radix-2 FFT function. Uses Bluestein's chirp z-transform algorithm.
+   */
+  public static void transformBluestein(double[] real, double[] imag) {
+    // Find a power-of-2 convolution length m such that m >= n * 2 - 1
+    int n = real.length;
+    int m = 1;
+    while (m < n * 2 - 1)
+      m *= 2;
+
+    // Trignometric tables
+    double[] tc = new double[2 * n];
+    double[] ts = new double[2 * n];
+    tc[0] = 1;
+    ts[0] = 0;
+    double qc = Math.cos(Math.PI / n), qs = Math.sin(Math.PI / n);
+    for (int i = 1; i < 2 * n; i++) {
+      tc[i] = tc[i - 1] * qc - ts[i - 1] * qs;
+      ts[i] = ts[i - 1] * qc + tc[i - 1] * qs;
+    }
+    double[] cosTable = new double[n];
+    double[] sinTable = new double[n];
+    for (int i = 0; i < n; i++) {
+      int j = (int) ((long) i * i % (n * 2)); // This is more accurate than j = i * i
+      cosTable[i] = tc[j];
+      sinTable[i] = ts[j];
+    }
+
+    // Temporary vectors and preprocessing
+    double[] areal = new double[m];
+    double[] aimag = new double[m];
+    for (int i = 0; i < n; i++) {
+      areal[i] = real[i] * cosTable[i] + imag[i] * sinTable[i];
+      aimag[i] = -real[i] * sinTable[i] + imag[i] * cosTable[i];
+    }
+    double[] breal = new double[m];
+    double[] bimag = new double[m];
+    breal[0] = cosTable[0];
+    bimag[0] = sinTable[0];
+    for (int i = 1; i < n; i++) {
+      breal[i] = breal[m - i] = cosTable[i];
+      bimag[i] = bimag[m - i] = sinTable[i];
+    }
+
+    // Convolution
+    double[] creal = new double[m];
+    double[] cimag = new double[m];
+    convolve(areal, aimag, breal, bimag, creal, cimag);
+
+    // Postprocessing
+    for (int i = 0; i < n; i++) {
+      real[i] = creal[i] * cosTable[i] + cimag[i] * sinTable[i];
+      imag[i] = -creal[i] * sinTable[i] + cimag[i] * cosTable[i];
+    }
+  }
+
+  /*
+   * Computes the circular convolution of the given complex vectors. Each vector's length must be
+   * the same.
+   */
+  public static void convolve(double[] xreal, double[] ximag, double[] yreal, double[] yimag,
+      double[] outreal, double[] outimag) {
+    if (xreal.length != ximag.length || xreal.length != yreal.length
+        || yreal.length != yimag.length || xreal.length != outreal.length
+        || outreal.length != outimag.length)
+      throw new IllegalArgumentException("Mismatched lengths");
+
+    int n = xreal.length;
+    xreal = xreal.clone();
+    ximag = ximag.clone();
+    yreal = yreal.clone();
+    yimag = yimag.clone();
+
+    transform(xreal, ximag);
+    transform(yreal, yimag);
+    for (int i = 0; i < n; i++) {
+      double temp = xreal[i] * yreal[i] - ximag[i] * yimag[i];
+      ximag[i] = ximag[i] * yreal[i] + xreal[i] * yimag[i];
+      xreal[i] = temp;
+    }
+    inverseTransform(xreal, ximag);
+    for (int i = 0; i < n; i++) { // Scaling (because this FFT implementation omits it)
+      outreal[i] = xreal[i] / n;
+      outimag[i] = ximag[i] / n;
+    }
+  }
+}
+package Geometry;
+
+
+/**
+ * Representation of a circle
+ * @author Lewin
+ *
+ */
+import static Geometry.Utils.*;
+
+public class Circle {
+    // circle centered at p with radius r
+    public Point p;
+    public double r;
+    
+    public Circle (double x, double y, double r) {
+        p = new Point (x, y);
+        this.r = r;
+    }
+    
+    // finds unique circle from 3 points
+    public Circle (Point a, Point b, Point c) {
+        double da1 = 2 * (c.x - a.x);
+        double da2 = 2 * (c.x - b.x);
+        double db1 = 2 * (c.y - a.y);
+        double db2 = 2 * (c.y - b.y);
+        double dc1 = c.x * c.x - a.x * a.x + c.y * c.y - a.y * a.y;
+        double dc2 = c.x * c.x - b.x * b.x + c.y * c.y - b.y * b.y;
+        
+        double x = 0, y = 0;
+        if (Math.abs (da1) <= EPS) {
+            y = dc1 / db1;
+            x = (dc2 - db2 * y) / da2;
+        } else {
+            db2 -= db1 * da2 / da1;
+            dc2 -= dc1 * da2 / da1;
+            y = dc2 / db2;
+            x = (dc1 - db1 * y) / da1;
+        }
+        p = new Point (x, y);
+        r = distance (p, a);
+    }
+    
+    public boolean contains (Point other) {
+        return distance (other, p) < r;
+    }
+}
+package Geometry;
+
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.TreeSet;
+/**
+ * O (n log n) for finding pair of closest points within a set
+ * @author Lewin
+ *
+ */
+public class ClosestPair {
+    private static State closestPair(Point[] points) {
+        Arrays.sort (points);
+        double min = 1e9;
+        int p1 = -1, p2 = -1;
+        int left = 0;
+        
+        TreeSet <Point> curset = new TreeSet <Point>(
+                new Comparator <Point> () {
+                    public int compare (Point a, Point b) {
+                        return (int)(Math.signum (a.y == b.y ? a.x - b.x : a.y - b.y));
+                    }
+                });
+        
+        for (Point p : points) {
+            while (p.x - points [left].x > min)
+                curset.remove (points [left++]);
+            for (Point next : curset.subSet (
+                    new Point (p.x, (int)(p.y - min), 0),
+                    new Point (p.x, (int)(p.y + min), 0))) {
+                double temp = dist (p, next);
+                if (temp < min) {
+                    min = temp;
+                    p1 = p.idx; p2 = next.idx;
+                }
+            }
+            curset.add (p);
+        }
+        
+        return new State (p1, p2, min);
+    }
+    
+    private static double dist (Point p1, Point p2) {
+        return Math.sqrt ((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y));
+    }
+
+    static class State {
+        public int p1, p2;
+        public double dist;
+        
+        public State (int p1, int p2, double dist) {
+            if (p2 < p1) {p2 ^= p1; p1 ^= p2; p2 ^= p1;}
+            this.p1 = p1;
+            this.p2 = p2;
+            this.dist = dist;
+        }
+    }
+}
+package Geometry;
+
+import static Geometry.Utils.EPS;
+import static Geometry.Utils.cross;
+
+import java.util.Arrays;
+import java.util.Comparator;
+
+
+/**
+ * Convex hull made easy
+ * 
+ * Adapted from USACO training pages
+ * 
+ * @author Lewin
+ */
+public class ConvexHull {
+  /**
+   * Given an array of N unsorted points, returns an array of points that make up the convex hull of
+   * the points in clockwise order
+   * 
+   * The points are the same objects (NOT copies)
+   * 
+   * Uses the gift-wrapping algorithm. Runs in O(N log N) time
+   * 
+   * @param p array of points
+   * @return array of points in convex hull in order
+   */
+  private static Point[] convexHull(Point[] p) {
+    int numPoints = p.length;
+    Point m = new Point(0, 0);
+    for (int i = 0; i < numPoints; i++) {
+      m.x += p[i].x / numPoints;
+      m.y += p[i].y / numPoints;
+    }
+
+    for (int i = 0; i < numPoints; i++)
+      p[i].angle = Math.atan2(p[i].y - m.y, p[i].x - m.x);
+
+    Arrays.sort(p, new Comparator<Point>() {
+      public int compare(Point a, Point b) {
+        return (int) Math.signum(a.angle - b.angle);
+      }
+    });
+
+    Point[] hull = new Point[numPoints];
+    hull[0] = p[0];
+    hull[1] = p[1];
+
+    int hullPos = 2;
+    for (int i = 2; i < numPoints - 1; i++) {
+      while (hullPos > 1 && cross(hull[hullPos - 2], hull[hullPos - 1], p[i]) < EPS)
+        hullPos--;
+      hull[hullPos++] = p[i];
+    }
+
+    // add last point
+    Point p2 = p[numPoints - 1];
+    while (hullPos > 1 && cross(hull[hullPos - 2], hull[hullPos - 1], p2) < EPS)
+      hullPos--;
+
+    int hullStart = 0;
+    boolean flag = false;
+    do {
+      flag = false;
+      if (hullPos - hullStart >= 2 && cross(hull[hullPos - 1], p2, hull[hullStart]) < EPS) {
+        p2 = hull[--hullPos];
+        flag = true;
+      }
+      if (hullPos - hullStart >= 2 && cross(p2, hull[hullStart], hull[hullStart + 1]) < EPS) {
+        hullStart++;
+        flag = true;
+      }
+    } while (flag);
+    hull[hullPos++] = p2;
+
+    return Arrays.copyOfRange(hull, hullStart, hullPos);
+  }
+}
+package Geometry;
+
+import static Geometry.Utils.*;
+/**
+ * Representation of a Line
+ * @author Lewin
+ *
+ */
+public class Line {
+    public double   a, b, c;
+    
+    // ax + by = c
+    
+    /**
+     * Standard representation
+     */
+    public Line (double a, double b, double c) {
+        this.a = a;
+        this.b = b;
+        this.c = c;
+    }
+    
+    /**
+     * Unique line between two points
+     */
+    public Line (Point p1, Point p2) { // two points
+        if (p1.x == p2.x) {
+            a = 1;
+            b = 0;
+            c = -p1.x;
+        } else {
+            b = 1;
+            a = -(p1.y - p2.y) / (p1.x - p2.x);
+            c = -(a * p1.x) - (b * p1.y);
+        }
+    }
+    
+    /**
+     * Point-slope formula
+     */
+    public Line (Point p, double m) {
+        a = -m;
+        b = 1;
+        c = -((a * p.x) + (b * p.y));
+    }
+    
+    // returns true if line l is parallel to this
+    public boolean parallel (Line l) {
+        return (Math.abs (a - l.a) <= EPS && Math.abs (b - l.b) <= EPS);
+    }
+    
+    // tests if two lines describe the same object
+    public boolean same_line (Line l) {
+        return (parallel (l) && Math.abs (c - l.c) <= EPS);
+    }
+    
+    // finds intersection point between lines
+    // if no intersection found, returns null;
+    // if same line, returns INF, INF point
+    public Point intersection_point (Line l) {
+        Point p = new Point (INF, INF);
+        if (same_line (l))
+            return p;
+        if (parallel (l))
+            return null;
+        
+        p.x = (l.b * c - b * l.c) / (l.a * b - a * l.b);
+        if (Math.abs (b) > EPS)
+            p.y = -(a * p.x + c) / b;
+        else
+            p.y = -(l.a * p.x + l.c) / l.b;
+        return p;
+    }
+    
+    // Finds the point closest to p lying on this line
+    public Point closest_Point (Point p) {
+        Point p_c = new Point (INF, INF);
+        if (Math.abs (b) <= EPS) {
+            p_c.x = -c;
+            p_c.y = p.y;
+            return p_c;
+        }
+        if (Math.abs (a) <= EPS) {
+            p_c.x = p.x;
+            p_c.y = -c;
+            return p_c;
+        }
+        Line perp = new Line (p, 1 / a);
+        return intersection_point (perp);
+    }
+}
+package Geometry;
+
+import java.util.*;
+import static Geometry.Utils.*;
+
+/**
+ * Representation of a Point
+ * @author Lewin
+ *
+ */
+public class Point implements Comparable <Point> {
+    public double   x, y, angle;
+    public int idx;
+    
+    public Point (double x, double y) {
+        this.x = x;
+        this.y = y;
+        angle = 0;
+    }
+    
+    public Point (double x, double y, int idx) {
+        this.x = x;
+        this.y = y;
+        this.idx = idx;
+    }
+    
+    public int compareTo (Point other) {
+        return x == other.x ? (int)Math.signum (y - other.y) : (int)Math.signum (x - other.x);
+    }
+}
+package Geometry;
+
+import static Geometry.Utils.*;
+
+/**
+ * Representation of a Segment
+ * @author Lewin
+ *
+ */
+public class Segment {
+    public Point    a, b;
+    public double   length;
+    
+    public Segment (Point a, Point b) {
+        this.a = a;
+        this.b = b;
+        length = distance (a, b);
+    }
+    
+    /**
+     * Returns shortest point distance
+     * @param c point we are considering
+     * @return shortest length from c to this segment
+     */
+    public double ptDist (Point c) {
+        if (dot (a, b, c) > 0)
+            return distance (b, c);
+        if (dot (b, a, c) > 0)
+            return distance (a, c);
+        if (length == 0)
+            return distance (a, c);
+        return Math.abs (cross (a, b, c) / length);
+    }
+    
+    /**
+     * Returns a point that segment intersects with s
+     * @param s the segment that we are testing for intersection
+     * @return A wrapper containting a boolean and a point
+     *  if boolean is true and point is null
+     *      this and s have infinitely many intersections
+     *  if boolean is true and point is not null
+     *      this and s intersect exactly once at point
+     *  if boolean is false (implies point is null)
+     *      this and s do not intersect
+     */
+    public Wrapper segments_intersect (Segment s) {
+        Line l1 = new Line (a, b), l2 = new Line (s.a, s.b);
+        Point p = new Point (0, 0);
+        
+        if (l1.same_line (l2))
+            return new Wrapper (
+                    (point_in_box (a, s.a, s.b) || point_in_box (b, s.a, s.b)
+                            || point_in_box (s.a, a, b) || point_in_box (s.b, a, b)),
+                    null);
+        
+        if (l1.parallel (l2))
+            return new Wrapper (false, null);
+        
+        p = l1.intersection_point (l2);
+        
+        return new Wrapper ((point_in_box (p, a, b) && point_in_box (p, s.a,
+                s.b)), p);
+    }
+    
+    static class Wrapper {
+        public boolean  state;
+        public Point    p;
+        
+        public Wrapper (boolean _state, Point _p) {
+            state = _state;
+            p = _p;
+        }
+    }
+}
+package Geometry;
+
+/**
+ * Useful functions 
+ * @author Lewin
+ * 
+ */
+public class Utils {
+    public static final double  EPS = 1e-9;
+    public static final int     INF = Integer.MAX_VALUE >> 2;
+    
+    // returns dot product of |a-b|*|b-c|
+    public static double dot (Point a, Point b, Point c) {
+        Point ab = new Point (b.x - a.x, b.y - a.y);
+        Point bc = new Point (c.x - b.x, c.y - b.y);
+        return ab.x * bc.x + ab.y * bc.y;
+    }
+    
+    // return cross product of |b-a|x|c-a|
+    public static double cross (Point a, Point b, Point c) {
+        Point ab = new Point (b.x - a.x, b.y - a.y);
+        Point ac = new Point (c.x - a.x, c.y - a.y);
+        return ab.x * ac.y - ab.y * ac.x;
+    }
+    
+    // returns if a,b,c are colinear
+    public static boolean colinear (Point a, Point b, Point c) {
+        return (a.x - b.x) * (a.y - c.y) == (a.x - c.x) * (a.y - b.y);
+    }
+    
+    // returns distance between points a, and b
+    public static double distance (Point a, Point b) {
+        return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+    
+    // returns true iff p lies in box with opposite corners b1, b2
+    public static boolean point_in_box (Point p, Point b1, Point b2) {
+        return ((p.x >= Math.min (b1.x, b2.x)) && (p.x <= Math.max (b1.x, b2.x))
+                && (p.y >= Math.min (b1.y, b2.y)) && (p.y <= Math.max (b1.y, b2.y)));
+    }
+}
+package Graph.Algorithms;
+import static Graph.Representation.LinkedList.N;
+import static Graph.Representation.LinkedList.eadj;
+import static Graph.Representation.LinkedList.ecost;
+import static Graph.Representation.LinkedList.elast;
+import static Graph.Representation.LinkedList.eprev;
+import java.util.Arrays;
+
+public class LowestCommonAncestor {
+    private static int      root;
+    private static int []   depth, queue;
+    private static int [][] anc;
+    
+    private static void init () {
+        Arrays.fill (depth, 1 << 29); // INF
+        
+        int front = 0, back = 0;
+        depth[root] = 0;
+        queue[back++] = root;
+        anc[0][root] = -1;
+        
+        while (front != back) {
+            int node = queue[front++];
+            for (int e = elast[node]; e != -1; e = eprev[e])
+                if (depth[node] + ecost[e] < depth[eadj[e]]) {
+                    depth[eadj[e]] = depth[node] + ecost[e];
+                    anc[0][eadj[e]] = node;
+                    queue[back++] = eadj[e];
+                }// depth [i] is distance from root to i
+                    // anc [0][i] is the first ancestor of i
+        }
+        
+        for (int k = 1; 1 << k < N; k++)
+            for (int i = 0; i < N; i++)
+                anc[k][i] = anc[k - 1][i] == -1 ? -1 : anc[k - 1][anc[k - 1][i]];
+    }
+    
+    private static int lca (int a, int b) {
+        if (depth[a] < depth[b]) {
+            a ^= b;
+            b ^= a;
+            a ^= b;
+        }
+        
+        // make depth [a] = depth [b] with binary search
+        int diff = depth[a] - depth[b];
+        for (int i = 0; 1 << i <= diff; i++)
+            if (((diff) & 1 << i) != 0)
+                a = anc[i][a];
+        
+        if (a == b)
+            return a;
+        
+        int log = 0;
+        while (1 << (log + 1) <= depth[a])
+            log++;
+        
+        // another binary search
+        for (int i = log; i >= 0; i--)
+            if (anc[i][a] != anc[i][b]) {
+                a = anc[i][a];
+                b = anc[i][b];
+            }
+        
+        return anc[0][a];
+    }
+    
+    private static int dist (int a, int b) {
+        return depth[a] + depth[b] - 2 * depth[lca (a, b)];
+    }
+}
+package Graph.Algorithms;
+
+import java.util.Arrays;
+
+public class MaximumMatching {
+    private static int N;
+    private static boolean [][] grid;
+    
+    private static void addEdge (int a, int b) {
+        grid[a][b] = grid[b][a] = true;
+    }
+    
+    private static int []   match, queue, pre, base;
+    private static boolean []   hash, blossom;
+    
+    private static int maximum_matching () {
+        pre = new int [N];
+        base = new int [N];
+        queue = new int [N];
+        hash = new boolean [N];
+        blossom = new boolean [N];
+        match = new int [N];
+        Arrays.fill (match, -1);
+        int ans = 0;
+        for (int i = 0; i < N; i++)
+            if (match[i] == -1)
+                ans += bfs (i);
+        return ans;
+    }
+    
+    private static int bfs (int p) {
+        Arrays.fill (pre, -1);
+        Arrays.fill (hash, false);
+        for (int i = 0; i < N; i++)
+            base[i] = i;
+        int front = 0, back = 0;
+        queue[back++] = p;
+        while (front < back) {
+            int u = queue[front++];
+            for (int v = 0; v < N; v++) {
+                if (grid[u][v] && base[u] != base[v] && v != match[u]) {
+                    if (v == p || (match[v] != -1 && pre[match[v]] != -1)) {
+                        int b = contract (u, v);
+                        for (int i = 0; i < N; i++) {
+                            if (blossom[base[i]]) {
+                                base[i] = b;
+                                if (!hash[i]) {
+                                    hash[i] = true;
+                                    queue[back++] = i;
+                                }
+                            }
+                        }
+                    } else if (pre[v] == -1) {
+                        pre[v] = u;
+                        if (match[v] == -1) {
+                            augment (v);
+                            return 1;
+                        } else {
+                            queue[back++] = match[v];
+                            hash[match[v]] = true;
+                        }
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+    
+    private static void augment (int u) {
+        while (u != -1) {
+            int v = pre[u], k = match[v];
+            match[u] = v;
+            match[v] = u;
+            u = k;
+        }
+    }
+    
+    private static int contract (int u, int v) {
+        Arrays.fill (blossom, false);
+        int b = find_base (base[u], base[v]);
+        change_blossom (b, u);
+        change_blossom (b, v);
+        if (base[u] != b)
+            pre[u] = v;
+        if (base[v] != b)
+            pre[v] = u;
+        return b;
+    }
+    
+    private static void change_blossom (int b, int u) {
+        while (base[u] != b) {
+            int v = match[u];
+            blossom[base[v]] = blossom[base[u]] = true;
+            u = pre[v];
+            if (base[u] != b)
+                pre[u] = v;
+        }
+    }
+    
+    private static int find_base (int u, int v) {
+        boolean [] in_path = new boolean [N];
+        while (true) {
+            in_path[u] = true;
+            if (match[u] == -1)
+                break;
+            u = base[pre[match[u]]];
+        }
+        while (!in_path[v])
+            v = base[pre[match[v]]];
+        return v;
+    }
+}
+package Graph.Algorithms.NetworkFlow;
+
+import java.util.Arrays;
+import static Graph.Representation.LinkedList.*;
+public class Dinic {
+    private static int []   flow, capa, now;
+    
+    // notice new addEdge method
+    // directed flow (even though we add two edges)
+    private static void add_edge (int a, int b, int c) {
+        eadj[eidx] = b; flow[eidx] = 0; capa[eidx] = c; eprev[eidx] = elast[a]; elast[a] = eidx++;
+        eadj[eidx] = a; flow[eidx] = c; capa[eidx] = c; eprev[eidx] = elast[b]; elast[b] = eidx++;
+    }
+    
+    private static int dinic (int source, int sink) {
+        int res, flow = 0;
+        while (bfs (source, sink)) { // see if there is an augmenting path
+            System.arraycopy (elast, 0, now, 0, N);
+            while ((res = dfs (source, INF, sink)) > 0) // push all possible flow through
+                flow += res;
+        }
+        return flow;
+    }
+    
+    private static int []   level;
+    
+    private static boolean bfs (int source, int sink) {
+        Arrays.fill (level, -1);
+        int front = 0, back = 0;
+        int [] queue = new int [N];
+        
+        level[source] = 0;
+        queue[back++] = source;
+        
+        while (front < back && level[sink] == -1) {
+            int node = queue[front++];
+            for (int e = elast[node]; e != -1; e = eprev[e]) {
+                int to = eadj[e];
+                if (level[to] == -1 && flow[e] < capa[e]) {
+                    level[to] = level[node] + 1;
+                    queue[back++] = to;
+                }
+            }
+        }
+        
+        return level[sink] != -1;
+    }
+    
+    private static int dfs (int cur, int curflow, int goal) {
+        if (cur == goal)
+            return curflow;
+        
+        for (int e = now[cur]; e != -1; now[cur] = e = eprev[e]) {
+            if (level[eadj[e]] > level[cur] && flow[e] < capa[e]) {
+                int res = dfs (eadj[e], Math.min (curflow, capa[e] - flow[e]), goal);
+                if (res > 0) {
+                    flow[e] += res;
+                    flow[e ^ 1] -= res;
+                    return res;
+                }
+            }
+        }
+        return 0;
+    }
+}
+package Graph.Algorithms.NetworkFlow;
+import static Graph.Representation.AdjacencyMatrix.*;
+public class FordFulkerson {
+    private static int networkFlow (int source, int sink) {
+        if (source == sink)
+            return INF;
+        
+        int totalFlow = 0;
+        int [][] cap = new int [N][N]; // don't want to alter original array
+        for (int i = 0; i < N; i++)
+            // if you do want to alter it, change input from grid to cap
+            System.arraycopy (grid[i], 0, cap[i], 0, N); // get rid of these three
+                                                                        // lines
+        
+        while (true) { // while there exists an augmenting path
+            int [] prev = new int [N], flow = new int [N];
+            boolean [] visited = new boolean [N];
+            int [] queue = new int [N];
+            int front = 0, back = 0;
+            
+            queue[back++] = source;
+            visited[source] = true;
+            flow[source] = INF;
+            boolean success = false;
+            
+            // find the path
+            outer : while (front != back) {
+                int node = queue[front++];
+                
+                for (int i = 0; i < N; i++)
+                    if (!visited[i] && cap[node][i] > 0) {
+                        prev[i] = node;
+                        flow[i] = Math.min (flow[node], cap[node][i]);
+                        visited[i] = true;
+                        
+                        if (i == sink) {
+                            success = true;
+                            break outer;
+                        }
+                        
+                        queue[back++] = i;
+                    }
+            }
+            if (!success)
+                break;
+            
+            // push flow through
+            int pathCap = flow[sink];
+            totalFlow += pathCap;
+            
+            for (int x = sink; x != source; x = prev[x]) {
+                cap[prev[x]][x] -= pathCap;
+                cap[x][prev[x]] += pathCap;
+            }
+        }
+        
+        return totalFlow;
+    }
+}
+package Graph.Algorithms.NetworkFlow;
+
+import java.util.Arrays;
+import static Graph.Representation.AdjacencyMatrix.*;
+public class MinCostMaxFlow {
+    private static int [][] cap, cost;
+    private static int []   pot;
+    
+    // add an edge from x to y with capacity w and cost c
+    private static void addEdge (int x, int y, int w, int c) {
+        cap[x][y] = w;
+        cost[x][y] = c;
+        cost[y][x] = -c;
+    }
+    
+    // if we want max cost, take replace c with Q - c, (Q > all c)
+    // then take Q * flow [0] - flow [1]
+    private static int [] flow (int source, int sink) {
+        int ans_flow = 0, ans_cost = 0;
+        pot = new int [N]; // potential of the node
+        
+        while (true) {
+            boolean [] used = new boolean [N];
+            int [] dist = new int [N], prev = new int [N];
+            Arrays.fill (dist, INF);
+            dist[source] = 0;
+            
+            while (true) {
+                int x = -1;
+                for (int i = 0; i < N; i++)
+                    if (dist[i] != INF && !used[i] && (x == -1 || dist[i] < dist[x]))
+                        x = i;
+                
+                if (x == -1)
+                    break;
+                
+                used[x] = true;
+                for (int i = 0; i < N; i++)
+                    if (cap[x][i] > 0
+                            && dist[x] + cost[x][i] + pot[x] - pot[i] < dist[i]) {
+                        dist[i] = dist[x] + cost[x][i] + pot[x] - pot[i];
+                        prev[i] = x;
+                    }
+            }
+            
+            if (!used[sink])
+                break;
+            
+            int ansf = INF, ansc = 0;
+            for (int x = sink; x != source; x = prev[x])
+                ansf = Math.min (ansf, cap[prev[x]][x]);
+            
+            ans_flow += ansf;
+            for (int x = sink; x != source; x = prev[x]) {
+                ansc += cost[prev[x]][x] * ansf;
+                cap[prev[x]][x] -= ansf;
+                cap[x][prev[x]] += ansf;
+            }
+            
+            for (int i = 0; i < N; i++)
+                pot[i] += dist[i];
+            
+            ans_flow += ansf;
+            ans_cost += ansc;
+        }
+        
+        return new int [] { ans_flow, ans_cost };
+        // returns both flow and cost
+    }
+}
+package Graph.Algorithms.ShortestPath;
+
+import static Graph.Representation.EdgeList.*;
+import Graph.Triplet;
+
+public class BellmanFord {
+    private static Triplet []   edges;
+    
+    private static int [] bellman_ford (int [] dist, int start) {
+        // IMPORTANT: use this if and only if there are negative path values
+        // this is the only way to process them
+        int [] prev = new int [N];
+        for (int i = 0; i < N; i++) {
+            dist[i] = INF;
+            prev[i] = -1;
+        }
+        
+        dist[start] = 0;
+        // shortest non-cyclic path is at most length N
+        for (int i = 0; i < N; i++) {
+            boolean changed = false;
+            
+            for (int j = 0; j < M; j++)
+                if (dist[edges[j].a] + edges[j].c < dist[edges[j].b]) {
+                    dist[edges[j].b] = dist[edges[j].a] + edges[j].c;
+                    prev[edges[j].b] = edges[j].a;
+                    changed = true;
+                }
+            
+            if (!changed)
+                break;
+        }
+        
+        // if we can make a path shorter, there exists a negative cycle
+        for (int i = 0; i < M; i++)
+            if (dist[edges[i].b] > dist[edges[i].a] + edges[i].c)
+                return null; // negative cycle
+                
+        return prev; // no cycles, parent pointers to recreate path
+        // replace this with true/false if you don't care about parent pointers
+    }
+}
+package Graph.Algorithms.ShortestPath;
+
+import java.util.Arrays;
+import java.util.PriorityQueue;
+import Graph.Triplet;
+import static Graph.Representation.LinkedList.*;
+
+public class Dijkstra {
+    private static int [] dijkstra_prev (int [] dist, int start) {
+        Arrays.fill (dist, INF);
+        int [] prev = new int [N];
+        boolean [] visited = new boolean [N];
+        PriorityQueue <Triplet> pq = new PriorityQueue <Triplet> ();
+        pq.add (new Triplet (start, -1, 0));
+        
+        while (pq.size () > 0) {
+            int node = pq.peek ().a, pre = pq.peek ().b, weight = pq.peek ().c;
+            pq.poll ();
+            if (visited[node])
+                continue;
+            visited[node] = true;
+            dist[node] = weight;
+            prev[node] = pre;
+            
+            for (int e = elast[node]; e != -1; e = eprev[e])
+                if (!visited[eadj[e]])
+                    pq.add (new Triplet (eadj[e], node, ecost[e] + weight));
+        }
+        
+        return prev; // parent pointers (in case you want to recreate the path)
+    }
+}
+package Graph.Algorithms.ShortestPath;
+public class FloydWarshall {
+    private static void floyd_warshall (int [][] dist) {
+        int N = dist.length;
+        for (int k = 0; k < N; k++)
+            for (int i = 0; i < N; i++)
+                for (int j = 0; j < N; j++)
+                    dist[i][j] = Math.min (dist[i][j], dist[i][k] + dist[k][j]);
+        // dist [i][j] is the shortest distance from node i to node j
+        // if dist [i][j] == INF, then they are not connected
+    }
+}
+package Graph.Algorithms;
+
+import java.util.PriorityQueue;
+import static Graph.Representation.LinkedList.*;
+import Graph.Pair;
+
+public class SpanningTree {
+
+    // for max spanning tree, add -weight and return -treeCost
+    // for product trees, take the log of each weight (log (ab) = log (a) + log (b))
+    private static int minSpanningTree () { // Prim's algorithm
+        boolean [] visited = new boolean [N];
+        PriorityQueue <Pair> pq = new PriorityQueue <Pair> ();
+        int treeCost = 0, treeSize = 0;
+        pq.add (new Pair (0, 0));
+        
+        while (treeSize < N) {
+            int node = pq.peek ().a, weight = pq.peek ().b;
+            pq.poll ();
+            if (visited[node])
+                continue;
+            treeSize++;
+            treeCost += weight;
+            visited[node] = true;
+            
+            for (int e = elast[node]; e != -1; e = eprev[e])
+                if (!visited[eadj[e]])
+                    pq.add (new Pair (eadj[e], ecost[e]));
+        }
+        
+        return treeCost;
+    }
+}
+package Graph.Algorithms;
+
+import java.util.Arrays;
+import static Graph.Representation.LinkedList.*;
+
+public class StronglyConnectedComponents {
+    private static int [] part, index, lowlink, stack, size;
+    private static int pidx, sidx, ssize;
+    private static boolean [] instack;
+    
+    private static void tarjan() {
+        stack = new int [N];
+        index = new int [N];
+        part = new int [N];
+        lowlink = new int [N];
+        instack = new boolean [N];
+        size = new int [N];
+        Arrays.fill (index, -1);
+        
+        pidx = 0; sidx = 0; ssize = 0;
+        for (int i = 0; i < N; i++)
+            if (index [i] == -1)
+                strongconnect (i);
+    }
+    
+    private static void strongconnect (int node) {
+        index [node] = pidx;
+        lowlink [node] = pidx;
+        pidx++;
+        stack [sidx++] = node;
+        instack [node] = true;
+        
+        for (int e = elast [node]; e != -1; e = eprev [e]) {
+            if (index [eadj [e]] == -1) {
+                strongconnect (eadj [e]);
+                if (lowlink [eadj [e]] < lowlink [node])
+                    lowlink [node] = lowlink [eadj [e]];
+            } else if (instack [eadj [e]]) {
+                if (index [eadj [e]] < lowlink [node])
+                    lowlink [node] = index [eadj [e]];
+            }
+        }
+        
+        if (lowlink [node] == index [node]) {
+            int cur, csize = 0;
+            do {
+                cur = stack [--sidx];
+                csize++;
+                part [cur] = ssize;
+                instack [cur] = false;
+            } while (cur != node);
+            size [ssize++] = csize; 
+        }
+    }
+}
+package Graph.Algorithms;
+import static Graph.Representation.LinkedList.*;
+
+public class TopologicalSort {
+    private static int []   indeg;
+    
+    // note new addEdge method
+    private static void d_addEdge (int a, int b, int c) { // directed + indegrees
+        indeg[b]++; eadj[eidx] = b; eprev[eidx] = elast[a]; ecost[eidx] = c; elast[a] = eidx++;
+    }
+    
+    private static boolean toposort (int [] topo) {
+        int [] queue = new int [N];
+        int front = 0, back = 0, idx = 0;
+        
+        // add all nodes with no incoming edges
+        for (int i = 0; i < indeg.length; i++)
+            if (indeg[i] == 0)
+                queue[back++] = i;
+        
+        while (front != back) {
+            int node = queue[front++];
+            topo[idx++] = node;
+            
+            // expand current node, removing all of its edges
+            for (int e = elast[node]; e != -1; e = eprev[e])
+                if (--indeg[eadj[e]] == 0)
+                    queue[back++] = eadj[e];
+        }
+        
+        return idx != topo.length; // true if successful, false if not a DAG
+        // topo will contain topologically sorted list of nodes
+    }
+}
+package Graph;
+
+public class Pair implements Comparable <Pair> {
+    public int a, b;
+    public Pair (int a, int b) {
+        this.a = a;
+        this.b = b;
+    }
+    
+    public int compareTo(Pair other) {
+        return b == other.b ? a - other.a : b - other.b;
+    }
+}
+package Graph.Representation;
+
+/**
+ * 
+ * @author Lewin
+ *
+ */
+public class AdjacencyMatrix implements Graph {
+    public static int N;
+    public static int [][] grid;
+    
+    @Override
+    public void init(int N, int M) {
+        this.N = N;
+        grid = new int [N][N];
+    }
+
+    @Override
+    public void addEdge(int a, int b, int weight) {
+        grid [a][b] = weight;
+        // if don't want bidirectional, comment out next line
+        grid [b][a] = weight;
+    }
+
+}
+package Graph.Representation;
+
+public class EdgeList implements Graph {
+    static class Edge {
+        public int from, to, weight;
+        public Edge (int from, int to, int weight) {
+            this.from = from;
+            this.to = to;
+            this.weight = weight;
+        }
+    }
+    
+    public static int N, M, idx;
+    public static Edge [] edges;
+
+    @Override
+    public void init(int N, int M) {
+        this.N = N;
+        this.M = M;
+        edges = new Edge [M];
+        idx = 0;
+    }
+    
+    @Override
+    public void addEdge(int a, int b, int weight) {
+        edges [idx++] = new Edge (a, b, weight);
+    }
+    
+}
+package Graph.Representation;
+
+public interface Graph {
+    // N number of nodes
+    // nodes labeled 0...N-1
+    // M number of edges
+    public static final int INF = 1 << 29;
+    public void init (int N, int M);
+    public void addEdge (int a, int b, int weight);
+}
+package Graph.Representation;
+
+/**
+ * 
+ * @author Lewin
+ *
+ */
+public class LinkedList implements Graph {
+    public static int []   eadj, elast, eprev, ecost;
+    public static int      eidx;
+    public static int N, M;
+    
+    @Override
+    public void init (int N, int M) {
+        this.N = N;
+        this.M = M;
+        
+        eadj = new int [2 * M];
+        eprev = new int [2 * M];
+        ecost = new int [2 * M];
+        elast = new int [N];
+        eidx = 0;
+    }
+    
+    @Override
+    public void addEdge (int a, int b, int weight) {
+        eadj [eidx] = b; ecost [eidx] = weight; eprev [eidx] = elast [a]; elast [a] = eidx++;
+        // if don't want bidirectional, comment out below line
+        eadj [eidx] = a; ecost [eidx] = weight; eprev [eidx] = elast [b]; elast [b] = eidx++;
+    }
+}
+package Graph;
+
+public class Triplet implements Comparable <Triplet> {
+    public int a, b, c;
+    
+    public Triplet (int a, int b, int c) {
+        this.a = a;
+        this.b = b;
+        this.c = c;
+    }
+    
+    public int compareTo (Triplet other) {
+        return c == other.c ? b == other.b ? a - other.a : b - other.b : c - other.c;
+    }
+}
+package LinearProgramming;
+
+public class LPSolver {
+  public static double EPS = 1e-9;
+  public int m, n;
+  public int[] B, N;
+  public double[][] D;
+  public double[] x;
+  
+  public LPSolver(double[][] A, double[] b, double[] c) {
+    n = c.length;
+    m = b.length;
+    N = new int[n + 1];
+    B = new int[m];
+    D = new double[m + 2][n + 2];
+    for (int i = 0; i < m; i++) for (int j = 0; j < n; j++) D[i][j] = A[i][j];
+    for (int i = 0; i < m; i++) { B[i] = n+i; D[i][n] = -1; D[i][n+1] = b[i]; }
+    for (int j = 0; j < n; j++) { N[j] = j; D[m][j] = -c[j]; }
+    N[n] = -1; D[m+1][n] = 1;
+  }
+  
+  public void pivot(int r, int s) {
+    for (int i = 0; i < m+2; i++) if (i != r)
+      for (int j = 0; j < n+2; j++) if (j != s)
+        D[i][j] -= D[r][j] * D[i][s] / D[r][s];
+    for (int j = 0; j < n+2; j++) if (j != s) D[r][j] /= D[r][s];
+    for (int i = 0; i < m+2; i++) if (i != r) D[i][s] /= -D[r][s];
+    D[r][s] = 1.0 / D[r][s];
+    int t = B[r]; B[r] = N[s]; N[s] = t;
+  }
+  
+  public boolean simplex(int phase) {
+    int x = phase == 1 ? m+1 : m;
+    while (true) {
+      int s = -1;
+      for (int j = 0; j <= n; j++) {
+        if (phase == 2 && N[j] == -1) continue;
+        if (s == -1 || D[x][j] < D[x][s] || (Math.abs(D[x][j] - D[x][s]) < EPS && N[j] < N[s])) s = j;
+      }
+      if (D[x][s] >= -EPS) return true;
+      int r = -1;
+      for (int i = 0; i < m; i++) {
+        if (D[i][s] <= 0) continue;
+        if (r == -1 || D[i][n+1] * D[r][s] < D[r][n+1] * D[i][s] ||
+            (Math.abs(D[i][n+1] * D[r][s] - D[r][n+1] * D[i][s]) < EPS && B[i] < B[r])) r = i;
+      }
+      if (r == -1) return false;
+      pivot(r, s);
+    }
+  }
+  
+  public double solve() {
+    int r = 0;
+    for (int i = 1; i < m; i++) if (D[i][n+1] < D[r][n+1]) r = i;
+    if (D[r][n+1] <= -EPS) {
+      pivot(r, n);
+      if (!simplex(1) || D[m+1][n+1] < -EPS) return Double.NEGATIVE_INFINITY;
+      for (int i = 0; i < m; i++) if (B[i] == -1) {
+        int s = -1;
+        for (int j = 0; j <= n; j++)
+          if (s == -1 || D[i][j] < D[i][s] || (Math.abs(D[i][j] - D[i][s]) < EPS && N[j] < N[s])) s = j;
+        pivot(i, s);
+      }
+    }
+    if (!simplex(2)) return Double.POSITIVE_INFINITY;
+    x = new double[n];
+    for (int i = 0; i < m; i++) if (B[i] < n) x[B[i]] = D[i][n+1];
+    return D[m][n+1];
+  }
+}
+package Matrix;
+
+public class Determinant {
+    
+    // square matrix
+    private static double det (double [][] arr) {
+        int N = arr.length;
+        double [][] M = new double [N][N];
+        for (int i = 0; i < arr.length; i++)
+            System.arraycopy (arr[i], 0, M[i], 0, N);
+        
+        double mult = 1;
+        for (int r = 0; r < N; r++) {
+            int k = r;
+            while (M[k][r] == 0) {
+                k++;
+                if (k == N)
+                    return 0;
+            }
+            double [] temp = M[r];
+            M[r] = M[k];
+            M[k] = temp;
+            if (r != k) {
+                mult *= -1;
+            }
+            
+            double lv = M[r][r];
+            for (int j = 0; j < N; j++)
+                M[r][j] /= lv;
+            mult *= lv;
+            
+            for (int i = r; i < N; i++) {
+                if (i != r) {
+                    lv = M[i][r];
+                    for (int j = r; j < N; j++)
+                        M[i][j] -= lv * M[r][j];
+                }
+            }
+        }
+        return mult;
+    }
+}
+package Matrix;
+
+public class MatrixInverse {
+    
+    // square matrix
+    // returns null if no inverse
+    private static double[][] inv (double [][] arr) {
+        int N = arr.length;
+        double [][] M = new double [N][2 * N];
+        for (int i = 0; i < arr.length; i++) {
+            System.arraycopy (arr[i], 0, M[i], 0, N);
+            M[i][i + N] = 1; 
+        }
+        
+        for (int r = 0; r < N; r++) {
+            int k = r;
+            while (M[k][r] == 0) {
+                k++;
+                if (k == N)
+                    return null; // no inverse
+            }
+            double [] temp = M[r];
+            M[r] = M[k];
+            M[k] = temp;
+            
+            double lv = M[r][r];
+            for (int j = 0; j < 2 * N; j++)
+                M[r][j] /= lv;
+            
+            for (int i = 0; i < N; i++) {
+                if (i != r) {
+                    lv = M[i][r];
+                    for (int j = 0; j < 2 * N; j++)
+                        M[i][j] -= lv * M[r][j];
+                }
+            }
+        }
+        
+        double [][] ret = new double [N][N];
+        for (int i = 0; i < N; i++)
+            System.arraycopy (M[i], N, ret[i], 0, N);
+        return ret;
+    }
+}
+package Matrix;
+
+/**
+ * Operations on matrices
+ * @author Lewin
+ *
+ */
+public class MatrixOperations {
+    private static int mod;
+    
+    private static int [][] mat_exp (int [][] A, int e) {
+        if (e == 1)
+            return A;
+        else if (e % 2 == 0) {
+            int [][] A1 = mat_exp (A, e / 2);
+            return matrix_mult (A1, A1);
+        } else
+            return matrix_mult (A, mat_exp (A, e - 1));
+    }
+    
+    private static int [][] matrix_mult (int [][] A, int [][] B) {
+        int [][] C = new int [A.length] [A.length];
+        for (int i = 0; i < A.length; i++)
+            for (int j = 0; j < A.length; j++)
+                for (int k = 0; k < A.length; k++)
+                    C[i][k] = (C[i][k] + A[i][j] * B[j][k]) % mod;
+        return C;
+    }
+}
+package Matrix;
+
+/**
+ * Row reduce function
+ * @author Lewin
+ *
+ */
+public class RowReduce {
+    private static void rref (double [][] M) {
+        int row = M.length;
+        if (row == 0)
+            return;
+        
+        int col = M[0].length;
+        
+        int lead = 0;
+        for (int r = 0; r < row; r++) {
+            if (lead >= col)
+                return;
+            
+            int k = r;
+            while (M[k][lead] == 0) {
+                k++;
+                if (k == row) {
+                    k = r;
+                    lead++;
+                    if (lead == col)
+                        return;
+                }
+            }
+            double [] temp = M[r];
+            M[r] = M[k];
+            M[k] = temp;
+            
+            double lv = M[r][lead];
+            for (int j = 0; j < col; j++)
+                M[r][j] /= lv;
+            
+            for (int i = 0; i < row; i++) {
+                if (i != r) {
+                    lv = M[i][lead];
+                    for (int j = 0; j < col; j++)
+                        M[i][j] -= lv * M[r][j];
+                }
+            }
+            lead++;
+        }
+    }
+}
+package NumberTheory;
+
+/** 
+ * Implementation of Chinese Remainder Theorem
+ * @author Lewin
+ *
+ */
+public class ChineseRemainderTheorem {
+    private static long [] sol;
+    private static int s_idx;
+    /**
+     * Chinese Remainder Theorem
+     * @param nums List of moduli
+     * @param arr Each moduli has an array of possible values it could take on
+     * All solutions will be in sol (has arr[0].length*arr[1].length*...*arr[N].length solutions)
+     */
+    private static void CRT (int [] nums, int [][] arr) {
+        CRT (0, nums, arr, 0, 1);
+    }
+    
+    private static void CRT (int idx, int [] nums, int [][] arr, long res, long f) {
+        if (idx == nums.length) {
+            while (res < f) res += f;
+            res %= f;
+            sol [s_idx++] = res;
+            return;
+        }
+        for (int i = 0; i < arr [idx].length; i++)
+            CRT (idx + 1, nums, arr, euclid (f, nums [idx], res, arr [idx][i]), f * nums [idx]);
+    }
+    
+    private static long euclid (long m, long n, long a, long b) {
+        if (m == 0 && a == 0) return a;
+        long s = m, t = n, v = 1, u = 0, lastv = 0, lastu = 1, temp, q, r;
+        do {
+            q = s / t; r = s - t * q; s = t; t = r;
+            temp = u; u = lastu - u * q; lastu = temp;
+            temp = v; v = lastv - v * q; lastv = temp;
+        } while (r != 0);
+        a = (a * lastv * n) % (m * n);
+        b = (b * lastu * m) % (m * n);
+        if (m * lastu > n * lastv) return b - a;
+        else return a - b;
+    }
+}
+package NumberTheory;
+
+import java.util.HashMap;
+import static NumberTheory.Utils.inv;
+import static NumberTheory.SafeArithmetic.mod_exp;
+
+
+public class DiscreteLog {
+    // gcd (g, mod) = 1
+    public static long discreteLog (long g, long gn, long mod) {
+        long m = (long)Math.ceil (mod);
+        HashMap<Long, Long> mp = new HashMap <Long, Long>();
+        long cur = 1;
+        for (int i = 0; i < m; i++) {
+            mp.put(cur, (long)i);
+            cur = (cur * g) % mod;
+        }
+        long st2 = mod_exp (inv (g, mod), m, mod);
+        long y = gn;
+        for (int i = 0; i < m; i++) {
+            if (mp.containsKey(y))
+                return i * m + mp.get(y);
+            y = (y * st2) % mod;
+        }
+        return -1;
+    }
+}
+package NumberTheory;
+
+import java.math.BigInteger;
+import java.security.SecureRandom;
+
+/**
+ * Implementation of Pollard Rho's factoring algorithm
+ * @author Lewin
+ * http://en.wikipedia.org/wiki/Pollard's_rho_algorithm
+ */
+
+public class PollardRho {
+    private final static BigInteger     ZERO        = new BigInteger ("0");
+    private final static BigInteger     ONE     = new BigInteger ("1");
+    private final static BigInteger     TWO     = new BigInteger ("2");
+    private final static SecureRandom   random  = new SecureRandom ();
+    
+    // cycle detection
+    public static BigInteger rho (BigInteger N) {
+        BigInteger divisor;
+        BigInteger c = new BigInteger (N.bitLength (), random);
+        BigInteger x = new BigInteger (N.bitLength (), random);
+        BigInteger xx = x;
+        
+        // check divisibility by 2
+        if (N.mod (TWO).compareTo (ZERO) == 0)
+            return TWO;
+        
+        do {
+            x = x.multiply (x).mod (N).add (c).mod (N);
+            xx = xx.multiply (xx).mod (N).add (c).mod (N);
+            xx = xx.multiply (xx).mod (N).add (c).mod (N);
+            divisor = x.subtract (xx).gcd (N);
+        } while ((divisor.compareTo (ONE)) == 0);
+        
+        return divisor;
+    }
+    
+    // prints out all factors
+    // can modify to store these factors into some data structure
+    public static void factor (BigInteger N) {
+        if (N.compareTo (ONE) == 0)
+            return;
+        if (N.isProbablePrime (20)) {
+            System.out.println (N);
+            return;
+        }
+        BigInteger divisor = rho (N);
+        factor (divisor);
+        factor (N.divide (divisor));
+    }
+}
+package NumberTheory;
+/**
+ * Prime Siever
+ * @author Lewin
+ *
+ */
+public class PrimeSieve {
+    public static boolean [] isPrime;
+    public static int [] prime;
+    public static int idx, len;
+    
+    private static void generatePrimes () {
+        isPrime = new boolean [len + 1];
+        prime = new int [len / 2];
+        isPrime [2] = true; prime [idx++] = 2;
+        int i;
+        for (i = 3; i <= len; i += 2) isPrime [i] = true;
+        for (i = 3; i * i <= len; i += 2) {
+            if (isPrime [i]) {
+                prime [idx++] = i;
+                for (int j = i * i; j <= len; j += 2 * i)
+                    isPrime [j] = false;
+            }
+        }
+        for (; i <= len; i += 2)
+            if (isPrime [i])
+                prime [idx++] = i;
+    }
+}
+package NumberTheory;
+
+/**
+ * Safely multiplies and adds number under a modulus to prevent overflow
+ * Operations may still overflow if modulus is greater than Long.MAX_VALUE / 2
+ * @author Lewin
+ *
+ */
+public class SafeArithmetic {
+    public static long mod_mult (long x, long y, long p) {
+        if (x == 0 || y == 0) return 0;
+        long a = x, b = y, c = 0;
+        while (a > 0) {
+            if ((a & 1) == 1) c = (c + b) % p; 
+            a >>= 1; 
+            b = (b * 2) % p;
+        }
+        return c;
+    }
+    
+    public static long mod_exp (long b, long e, long mod) {
+        if (b == 0 || b == 1) return b;
+        long res = 1;
+        while (e > 0) {
+            if ((e & 1) == 1)
+                res = mod_mult (res, b, mod);
+            e >>= 1;
+            b = mod_mult (b, b, mod);
+        }
+        return res;
+    }
+}
+package NumberTheory;
+/**
+ * Euler's Totient Function Siever
+ * @author Lewin
+ * http://en.wikipedia.org/wiki/Euler's_totient_function
+ */
+public class TotientSieve {
+    private static boolean [] isPrime;
+    private static int [] prime;
+    private static int idx, len;
+    private static int [] phi;
+    
+    private static void phi_prime_sieve () {
+        isPrime = new boolean [len + 1];
+        prime = new int [len / 2]; 
+        phi = new int [len + 1];
+        phi [0] = 0; phi [1] = 1;
+        for (int i = 2; i <= len; i++) {
+            isPrime [i] = true;
+            phi [i] = i;
+        }
+        for (int i = 2; i <= len; i++) {
+            if (isPrime [i]) {
+                prime [idx++] = i;
+                phi [i] = i - 1;
+                for (int j = i + i; j <= len; j += i) {
+                    isPrime [j] = false;
+                    phi [j] /= i; phi [j] *= i - 1;
+                }
+            }
+        }
+    }
+}
+package NumberTheory;
+
+import static NumberTheory.PrimeSieve.*;
+/**
+ * Collection of common operations
+ * @author Lewin
+ *
+ */
+
+public class Utils {
+    // Euler's Totient Function
+    public static long phi (long n) {// make sure to generate primes
+        long temp = n;
+        for (int i = 0; prime [i] * prime [i] <= temp && i < idx; i++)
+            if (temp % prime [i] == 0) {
+                n -= n / prime [i];
+                while (temp % prime [i] == 0)
+                    temp /= prime [i];
+            }
+        return temp == 1 ? n : n / temp * (temp - 1);
+    }
+    
+    // N choose K
+    public static long comb (int n, int k) {
+        int a = Math.min (k, n - k);
+        long res = 1;
+        for (int i = 1; i <= a; i++) {
+            res *= n--; res /= i;
+        }
+        return res;
+    }
+    
+    // Greatest Common Divisor
+    public static long gcd (long x, long y) {
+        for (; x != 0; x ^= y, y ^= x, x ^= y, x %= y);
+        return y;
+    }
+    
+    // Inverse of N mod M;
+    public static long inv (long N, long M) {
+        long x = 0, lastx = 1, y = 1, lasty = 0, q, t, a = N, b = M;
+        while (b != 0) {
+            q = a / b; t = a % b; a = b; b = t;
+            t = x; x = lastx - q * x; lastx = t;
+            t = y; y = lasty - q * y; lasty = t;
+        }
+        return (lastx + M) % M;
+    }
+}
+package String;
+/**
+ * Implementation of Knuth-Morris-Pratt
+ * 
+ * See http://en.wikipedia.org/wiki/Knuth%E2%80%93Morris%E2%80%93Pratt_algorithm
+ * 
+ * @author Lewin
+ *
+ */
+public class KnuthMorrisPratt {
+    private static int KMP (String text, String word) {
+        char [] a = text.toCharArray (), b = word.toCharArray (); 
+        int [] T = new int [a.length + b.length];
+        
+        int pos = 2, cnd = 0;
+        T [0] = -1; T [1] = 0;
+        while (pos < b.length) {
+            if (b [pos - 1] == b [cnd]) {
+                cnd++; T [pos] = cnd;
+                pos++;
+            } else if (cnd > 0) cnd = T [cnd];
+            else {T [pos] = 0; pos++;}
+        }
+        
+        int m = 0, i = 0;
+        while (m + i < a.length) {
+            if (b [i] == a [m + i]) {
+                if (i == b.length - 1)
+                    return m;
+                i++;
+            } else {
+                m += i - T [i];
+                if (T [i] > -1) i = T [i];
+                else i = 0;
+            }
+        }
+        return a.length;
+    }
+}
+package String;
+
+import java.util.Arrays;
+/**
+ * O(n log n) suffix array
+ * O(n) longest common prefix
+ * 
+ * @author Lewin
+ *
+ */
+public class SuffixArray {
+    
+    private static int [] suffix_array (char [] s) {
+        int n = s.length;
+        int [] id = new int [n];
+        for (int i = 0; i < n; i++)
+            id[i] = s[i] - 'a';
+        
+        for (int k = 1; k <= n; k <<= 1) {
+            Triplet [] elem = new Triplet [n];
+            for (int i = 0; i < n; i++)
+                elem[i] = new Triplet (id[i], (i + k < n) ? id[i + k] : -1, i);
+            Arrays.sort (elem);
+            int cur = -1;
+            for (int i = 0; i < n; i++) {
+                if (i == 0
+                        || !(elem[i].a == elem[i - 1].a && elem[i].b == elem[i - 1].b))
+                    cur++;
+                id[elem[i].c] = cur;
+            }
+        }
+        
+        return id;
+    }
+    
+    private static int [] lcp (char [] A, int [] order, int [] rank) {
+        int n = order.length;
+        int [] height = new int [n];
+        
+        int h = 0;
+        for (int i = 0; i < n; i++) {
+            if (order [i] > 0) {
+                int j = rank [order [i] - 1];
+                while (i + h < n && j + h < n 
+                        && A [i + h] == A [j + h]) h++;
+                height [order [i]] = h;
+                if (h > 0) h--;
+            }
+        }
+        
+        return height;
+    }
+    
+    static class Triplet implements Comparable <Triplet> {
+        public int  a, b, c;
+        
+        public Triplet (int _a, int _b, int _c) {
+            a = _a;
+            b = _b;
+            c = _c;
+        }
+        
+        public int compareTo (Triplet other) {
+            return (a == other.a) ? b - other.b : a - other.a;
+        }
+    }
+}
+package String;
+
+public class SuffixTree {
+  static String alphabet = "abcdefghijklmnopqrstuvwxyz12";
+  static int alphabetSize = alphabet.length();
+
+  static class Node {
+    int depth; // from start of suffix
+    int begin;
+    int end;
+    Node[] children;
+    Node parent;
+    Node suffixLink;
+    int mask;
+    boolean mark;
+
+    Node(int begin, int end, int depth, Node parent) {
+      children = new Node[alphabetSize];
+      this.begin = begin;
+      this.end = end;
+      this.parent = parent;
+      this.depth = depth;
+      mask = 0;
+      mark = false;
+    }
+
+    boolean contains(int d) {
+      return depth <= d && d < depth + (end - begin);
+    }
+  }
+
+  public static Node buildSuffixTree(String s) {
+    int n = s.length();
+    byte[] a = new byte[n];
+    for (int i = 0; i < n; i++) {
+      a[i] = (byte) alphabet.indexOf(s.charAt(i));
+    }
+    Node root = new Node(0, 0, 0, null);
+    Node cn = root;
+    // root.suffixLink must be null, but that way it gets more convenient
+    // processing
+    root.suffixLink = root;
+    Node needsSuffixLink = null;
+    int lastRule = 0;
+    int j = 0;
+    for (int i = -1; i < n - 1; i++) {// strings s[j..i] already in tree,
+      // add s[i+l] to it.
+      int cur = a[i + 1]; // last char of current string
+      for (; j <= i + 1; j++) {
+        int curDepth = i + 1 - j;
+        if (lastRule != 3) {
+          cn = cn.suffixLink != null ? cn.suffixLink : cn.parent.suffixLink;
+          int k = j + cn.depth;
+          while (curDepth > 0 && !cn.contains(curDepth - 1)) {
+            k += cn.end - cn.begin;
+            cn = cn.children[a[k]];
+          }
+        }
+        if (!cn.contains(curDepth)) { // explicit node
+          if (needsSuffixLink != null) {
+            needsSuffixLink.suffixLink = cn;
+            needsSuffixLink = null;
+          }
+          if (cn.children[cur] == null) {
+            // no extension - add leaf
+            cn.children[cur] = new Node(i + 1, n, curDepth, cn);
+            lastRule = 2;
+          } else {
+            cn = cn.children[cur];
+            lastRule = 3; // already exists
+            break;
+          }
+        } else { // implicit node
+          int end = cn.begin + curDepth - cn.depth;
+          if (a[end] != cur) { // split implicit node here
+            Node newn = new Node(cn.begin, end, cn.depth, cn.parent);
+            newn.children[cur] = new Node(i + 1, n, curDepth, newn);
+            newn.children[a[end]] = cn;
+            cn.parent.children[a[cn.begin]] = newn;
+            if (needsSuffixLink != null) {
+              needsSuffixLink.suffixLink = newn;
+            }
+            cn.begin = end;
+            cn.depth = curDepth;
+            cn.parent = newn;
+            cn = needsSuffixLink = newn;
+            lastRule = 2;
+          } else if (cn.end != n || cn.begin - cn.depth < j) {
+            lastRule = 3;
+            break;
+          } else {
+            lastRule = 1;
+          }
+        }
+      }
+    }
+    root.suffixLink = null;
+    return root;
+  }
+
+}
+package String;
+
+public class ZAlgorithm {
+  public int[] zAlgorithm(char[] let) {
+    int N = let.length;
+    int[] z = new int[N];
+    int L = 0, R = 0;
+    for (int i = 1; i < N; i++) {
+      if (i > R) {
+        L = R = i;
+        while (R < N && let[R-L] == let[R]) R++;
+        z[i] = R-L; R--;
+      } else {
+        int k = i-L;
+        if (z[k] < R-i+1) z[i] = z[k];
+        else {
+          L = i;
+          while (R < N && let[R-L] == let[R]) R++;
+          z[i] = R-L; R--;
+        }
+      }
+    }
+    z[0] = N;
+    return z;
+  }
+}
+package Trees;
+/**
+ * Given a list of N numbers in a row, we can use this structure for
+ * exactly 1 of 2 uses:
+ * a) range query, point update
+ * b) range update, point query
+ * 
+ * For more info, see:
+ * http://community.topcoder.com/tc?module=Static&d1=tutorials&d2=binaryIndexedTrees
+ * @author Lewin
+ */
+public class BinaryIndexedTrees {
+    private static int []   tree;
+    private static int      N;
+    
+    private static int query (int K) {
+        int sum = 0;
+        for (int i = K; i > 0; i -= (i & -i))
+            sum += tree [i];
+        return sum;
+    }
+    
+    private static void update (int K, int val) {
+        for (int i = K; i <= N; i += (i & -i))
+            tree [i] += val;
+    }
+}
+package Trees;
+
+import java.util.Arrays;
+
+public class HeavyLightTree {
+  public static int MAXN = 10000;
+  static {
+    size = new int[MAXN];
+    cp = new int[MAXN];
+    depth = new int[MAXN];
+    anc = new int[15][MAXN];
+    bestchild = new int[MAXN];
+    whchain = new int[MAXN];
+    chainhead = new int[MAXN];
+    index = new int[MAXN];
+    chains = new int[MAXN];
+    emp = new Edge[MAXN];
+    g = new Graph (MAXN, MAXN - 1);
+  }
+
+  static class Graph {
+    public int[] eadj, eprev, elast, ecost;
+    public int eidx;
+
+    public Graph(int N, int M) {
+      eadj = new int[2 * M];
+      eprev = new int[2 * M];
+      ecost = new int[2 * M];
+      elast = new int[N];
+      reset();
+    }
+    
+    public void reset() {
+      Arrays.fill (elast, -1);
+      eidx = 0;
+    }
+
+    public void addEdge(int a, int b, int c) {
+      eadj[eidx] = b;
+      ecost[eidx] = c;
+      eprev[eidx] = elast[a];
+      elast[a] = eidx++;
+      eadj[eidx] = a;
+      ecost[eidx] = c;
+      eprev[eidx] = elast[b];
+      elast[b] = eidx++;
+    }
+  }
+
+  static class Edge {
+    public int a, b;
+
+    public Edge(int a, int b) {
+      this.a = a;
+      this.b = b;
+    }
+
+    @Override
+    public int hashCode() {
+      return a * 10000 + b;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (!(other instanceof Edge))
+        return false;
+      return ((Edge) other).a == a && ((Edge) other).b == b;
+    }
+  }
+
+  public static int[] arr;
+
+  static class SegmentTree {
+    public int start, end, max;
+    public SegmentTree left, right;
+
+    public SegmentTree(int start, int end) {
+      this.start = start;
+      this.end = end;
+      if (start == end) {
+        max = arr[start];
+      } else {
+        int mid = (start + end) >> 1;
+        left = new SegmentTree(start, mid);
+        right = new SegmentTree(mid + 1, end);
+        max = Math.max(left.max, right.max);
+      }
+    }
+
+    public void update(int pos, int val) {
+      if (start == pos && end == pos) {
+        max = val;
+        return;
+      }
+      int mid = (start + end) >> 1;
+      if (mid >= pos)
+        left.update(pos, val);
+      else
+        right.update(pos, val);
+      max = Math.max(left.max, right.max);
+    }
+
+    public int query(int s, int e) {
+      if (start == s && end == e) {
+        return max;
+      }
+      int mid = (start + end) >> 1;
+      if (mid >= e)
+        return left.query(s, e);
+      else if (mid < s)
+        return right.query(s, e);
+      else
+        return Math.max(left.query(s, mid), right.query(mid + 1, e));
+    }
+  }
+
+  public static int N;
+  public static Graph g;
+  public static Edge[] emp;
+
+  public static int[] size, cp, depth;
+  public static int[][] anc;
+  public static int[] bestchild;
+
+  public static int dfs0(int node, int par) {
+    anc[0][node] = par;
+    depth[node] = par == -1 ? 0 : depth[par] + 1;
+    size[node] = 1;
+    bestchild[node] = -1;
+    int max = 0;
+    for (int e = g.elast[node]; e != -1; e = g.eprev[e]) {
+      int next = g.eadj[e];
+      if (next == par)
+        continue;
+      cp[next] = g.ecost[e];
+      int sizen = dfs0(next, node);
+      if (sizen > max) {
+        max = sizen;
+        bestchild[node] = next;
+      }
+      size[node] += sizen;
+    }
+    return size[node];
+  }
+
+  public static int[] whchain, chainhead, index, chains;
+  public static int cidx, widx;
+
+  public static void dfs1(int node, int par) {
+    whchain[node] = widx;
+    index[node] = cidx;
+    chains[cidx++] = node;
+    
+    if (bestchild[node] == -1)
+      return;
+    dfs1(bestchild[node], node);
+    for (int e = g.elast[node]; e != -1; e = g.eprev[e]) {
+      int next = g.eadj[e];
+      if (next == par || next == bestchild[node])
+        continue;
+      widx++;
+      chainhead[widx] = next;
+      dfs1(next, node);
+    }
+  }
+
+  public static SegmentTree root;
+  public static void init() {
+    dfs0(0, -1);
+    for (int i = 1; i < 15; i++) {
+      for (int j = 0; j < N; j++) {
+        anc[i][j] = anc[i - 1][j] == -1 ? -1 : anc[i - 1][anc[i - 1][j]];
+      }
+    }
+    chainhead[0] = 0;
+    widx = 0;
+    cidx = 0;
+    dfs1(0, -1);
+    arr = new int[cidx];
+    for (int i = 0; i < cidx; i++)
+      arr[i] = cp[chains[i]];
+    root = new SegmentTree(0, cidx - 1);
+  }
+
+  public static int lca(int a, int b) {
+    if (depth[a] < depth[b]) {
+      a ^= b;
+      b ^= a;
+      a ^= b;
+    }
+
+    int diff = depth[a] - depth[b];
+    for (int i = 0; i < anc.length && diff > 0; i++, diff >>= 1)
+      if ((diff & 1) != 0)
+        a = anc[i][a];
+
+    if (a == b)
+      return a;
+
+    for (int i = anc.length - 1; i >= 0; i--)
+      if (anc[i][a] != anc[i][b]) {
+        a = anc[i][a];
+        b = anc[i][b];
+      }
+
+    return anc[0][a];
+  }
+
+  public static int query_up(int a, int b) {
+    // a is an ancestor of b
+    int achain = whchain[a], bchain = whchain[b];
+    int ans = 0;
+    while (achain != bchain) { // try to get them on the same chain
+      if (b != chainhead[bchain])
+        ans = Math.max(ans, root.query(index[chainhead[bchain]], index[b]));
+      b = anc[0][chainhead[bchain]];
+      bchain = whchain[b];
+    }
+    if (a != b)
+      ans = Math.max(ans, root.query(index[a] + 1, index[b]));
+    return ans;
+  }
+
+  public static int query(int a, int b) {
+    int lca = lca(a, b);
+    return Math.max(query_up(lca, a), query_up(lca, b));
+  }
+
+  public static void update(int x, int c) {
+    Edge e = emp[x];
+    int a = e.a, b = e.b;
+    if (depth[a] < depth[b]) {
+      int t = a; a = b; b = t;
+    }
+    root.update(index[b], c);
+  }
+}
+package Trees;
+
+public class KDTree {
+    // don't know if this works
+    static class kd_tree {
+        public kd_tree Lchild = null, Rchild = null;
+        public Point[] points;
+        public int d;
+
+        public kd_tree(Point[] points, int depth) {
+            this.points = points;
+            int k = points[0].coord.length;
+            int N = points.length;
+            d = depth % k;
+
+            if (N == 1)
+                return;
+
+            Point[] temp;
+            int lo = 0, hi = N - 1, comp;
+            while (true) {
+                temp = new Point[N];
+                comp = points[lo].coord[d];
+                int f1 = 0, f2 = N - 1;
+                for (int i = lo; i <= hi; i++) {
+                    if (points[i].coord[d] < comp)
+                        temp[f1++] = points[i];
+                    else
+                        temp[f2--] = points[i];
+                }
+                points = temp;
+                if (f1 == N / 2)
+                    break;
+                if (f1 < N / 2)
+                    lo = f1;
+                else
+                    hi = f2;
+            }
+
+            Point[] first = new Point[N / 2], second = new Point[N - N / 2];
+            System.arraycopy(points, 0, first, 0, N / 2);
+            System.arraycopy(points, N / 2, second, 0, N - N / 2);
+            Lchild = new kd_tree(first, depth + 1);
+            Rchild = new kd_tree(second, depth + 1);
+        }
+
+    }
+
+    static class Point {
+        public int[] coord;
+
+        public Point(int[] coord) {
+            this.coord = coord;
+        }
+    }
+}
+package Trees;
+
+public class LazyIntervalTree {
+    public int  min, max, lazy, start, end;
+    public LazyIntervalTree child1  = null, child2 = null;
+    
+    public LazyIntervalTree (int start, int end) {
+        this.start = start;
+        this.end = end;
+        if (start != end) {
+            int mid = (start + end) >> 1;
+            child1 = new LazyIntervalTree (start, mid);
+            child2 = new LazyIntervalTree (mid + 1, end);
+        }
+    }
+    
+    public void modify (int val) {
+        min += val;
+        max += val;
+        lazy += val;
+    }
+    
+    public void push () {
+        if (child1 == null)
+            return;
+        child1.modify (lazy);
+        child2.modify (lazy);
+        lazy = 0;
+    }
+    
+    public void join () {
+        if (child1 == null)
+            return;
+        min = Math.min (child1.min, child2.min);
+        max = Math.max (child1.max, child2.max);
+    }
+    
+    public int minQuery (int a, int b) {
+        if (a <= start && end <= b)
+            return min;
+        if (start > b || a > end)
+            return Integer.MAX_VALUE;
+        if (child1 == null)
+            return min;
+        
+        push ();
+        return Math.min (child1.minQuery (a, b), child2.minQuery (a, b));
+    }
+    
+    public int maxQuery (int a, int b) {
+        if (a <= start && end <= b)
+            return max;
+        if (start > b || a > end)
+            return -Integer.MAX_VALUE;
+        if (child1 == null)
+            return max;
+        
+        push ();
+        return Math.max (child1.maxQuery (a, b), child2.maxQuery (a, b));
+    }
+    
+    public void updateRange (int a, int b, int val) {
+        if (a <= start && end <= b) {
+            modify (val);
+            return;
+        }
+        if (start > b || a > end)
+            return;
+        if (child1 == null)
+            return;
+        
+        push ();
+        child1.updateRange (a, b, val);
+        child2.updateRange (a, b, val);
+        join ();
+    }
+}
+package Trees;
+
+public class LazySegmentTree {
+    public static int []        tree, lazy;
+    public static final int INF = 1 << 29;
+    public static int           PN, N;
+    
+    // PN = 1<<(f(N))
+    // f(N): for(i = 0; N>>i > 0; i++)
+    
+    private static void modify (int pos, int val) {
+        tree[pos] += val;
+        lazy[pos] += val;
+    }
+    
+    private static void push (int pos) {
+        modify (2 * pos, lazy[pos]);
+        modify (2 * pos + 1, lazy[pos]);
+        lazy[pos] = 0;
+    }
+    
+    private static void join (int pos) {
+        tree[pos] = Math.min (tree[2 * pos], tree[2 * pos + 1]);
+    }
+    
+    private static int query (int pos, int start, int end, int a, int b) {
+        if (a <= start && end <= b)
+            return tree[pos];
+        if (pos >= PN || start >= b || a >= end)
+            return INF;
+        push (pos);
+        int mid = (start + end) >> 1;
+        return Math.min (query (2 * pos, start, mid, a, b),
+                query (2 * pos + 1, mid + 1, end, a, b));
+    }
+    
+    private static void update (int pos, int start, int end, int a, int b,
+            int val) {
+        if (a <= start && end <= b) {
+            modify (pos, val);
+            return;
+        }
+        if (pos >= PN || start >= b || a >= end)
+            return;
+        push (pos);
+        int mid = (start + end) >> 1;
+        update (2 * pos, start, mid, a, b, val);
+        update (2 * pos + 1, mid + 1, end, a, b, val);
+        join (pos);
+    }
+    
+    private static void build (int pos, int start, int end) {
+        if (pos >= PN || start >= N)
+            return;
+        int mid = (start + end) >> 1;
+        build (2 * pos, start, mid);
+        build (2 * pos + 1, mid + 1, end);
+        tree[pos] = tree[2 * pos];
+        lazy[pos] = 0;
+        if (mid < N)
+            tree[pos] = Math.min (tree[pos], tree[2 * pos + 1]);
+    }
+}
+package Trees;
+
+public class LinkCutTree {
+  private static final int INF = 1000000000;
+  private static final TEdge NULL = new TEdge(null, INF);
+
+  static class TEdge {
+    public Node n;
+    public int weight;
+
+    public TEdge(Node n, int weight) {
+      this.n = n;
+      this.weight = n == null ? INF : weight;
+    }
+
+    public String toString() {
+      return (n == null ? null : n.id) + " " + weight;
+    }
+  }
+
+  static class Node {
+    int id, min;
+    TEdge left;
+    TEdge right;
+    TEdge parent;
+    boolean flip;
+
+    public Node(int id) {
+      this.id = id;
+      this.min = INF;
+      left = NULL;
+      right = NULL;
+      parent = NULL;
+    }
+
+    public String toString() {
+      return id + " " + "|L: " + left + " |R: " + right + " |P: " + parent;
+    }
+  }
+
+  static void push(Node x) {
+    if (!x.flip)
+      return;
+    x.flip = false;
+    TEdge t = x.left;
+    x.left = x.right;
+    x.right = t;
+    if (x.left.n != null)
+      x.left.n.flip = !x.left.n.flip;
+    if (x.right.n != null)
+      x.right.n.flip = !x.right.n.flip;
+  }
+
+  // Whether x is a root of a splay tree
+  static boolean isRoot(Node x) {
+    return x.parent.n == null || (x.parent.n.left.n != x && x.parent.n.right.n != x);
+  }
+
+  static void connect(Node ch, Node p, int weight, boolean leftChild) {
+    if (leftChild)
+      p.left = new TEdge(ch, weight);
+    else
+      p.right = new TEdge(ch, weight);
+
+    p.min =
+        Math.min(p.right.n == null ? INF : Math.min(p.right.n.min, p.right.weight),
+            p.left.n == null ? INF : Math.min(p.left.n.min, p.left.weight));
+
+    if (ch != null) {
+      ch.parent = new TEdge(p, weight);
+    }
+  }
+
+  // rotate edge (x, x.parent)
+  static void rotate(Node x) {
+    Node p = x.parent.n;
+    Node g = p.parent.n;
+    boolean isRootP = isRoot(p);
+    boolean leftChildX = (x == p.left.n);
+
+    TEdge next = leftChildX ? x.right : x.left;
+    int w1 = p.parent.weight;
+    int w2 = x.parent.weight;
+    int w3 = next.n == null ? w2 : next.weight;
+    connect(next.n, p, w2, leftChildX);
+    connect(p, x, w3, !leftChildX);
+
+    if (!isRootP)
+      connect(x, g, w1, p == g.left.n);
+    else
+      x.parent = new TEdge(g, w1);
+  }
+
+  static void splay(Node x) {
+    while (!isRoot(x)) {
+      Node p = x.parent.n;
+      Node g = p.parent.n;
+      if (!isRoot(p))
+        push(g);
+      push(p);
+      push(x);
+      if (!isRoot(p))
+        rotate((x == p.left.n) == (p == g.left.n) ? p : x);
+      rotate(x);
+    }
+    push(x);
+  }
+
+  // Makes node x the root of the virtual tree, and also x is the leftmost
+  // node in its splay tree
+  static Node expose(Node x) {
+    Node last = null;
+    int lw = INF;
+    for (Node y = x; y != null; y = y.parent.n) {
+      splay(y);
+      y.left = new TEdge(last, lw);
+      y.min =
+          Math.min(last == null ? INF : Math.min(last.min, lw),
+              y.right.n == null ? INF : Math.min(y.right.n.min, y.right.weight));
+      last = y;
+      lw = y.parent.weight;
+    }
+    splay(x);
+    return last;
+  }
+
+  public static Node findRoot(Node x) {
+    expose(x);
+    while (x.right.n != null) {
+      x = x.right.n;
+      push(x);
+    }
+    return x;
+  }
+
+  // prerequisite: x and y are in distinct trees
+  public static void link(Node x, Node y, int idx) {
+    if (findRoot(x) == findRoot(y))
+      throw new RuntimeException("error: x and y are connected");
+    expose(x);
+    x.flip = !x.flip; // evert
+    x.parent = new TEdge(y, idx);
+    expose(x);
+  }
+
+  public static boolean connected(Node x, Node y) {
+    if (x == y)
+      return true;
+    return findRoot(x) == findRoot(y);
+  }
+
+  public static void cut(Node x, Node y) {
+    expose(x);
+    x.flip = !x.flip; // evert
+    expose(y);
+    if (y.right.n != x || x.left.n != null || x.right.n != null)
+      throw new RuntimeException("error: no edge (x,y)");
+    y.right.n.parent = NULL;
+    y.right = NULL;
+    y.min = y.left.n == null ? INF : Math.min(y.left.weight, y.left.n.min);
+  }
+
+  static int find(Node x, Node y) {
+    expose(x);
+    x.flip = !x.flip;
+    expose(y);
+    int res = INF;
+    Node last = null;
+    for (Node z = x; z != y; z = z.parent.n) {
+      if (z.left.n != null && z != last)
+        res = Math.min(res, Math.min(z.left.weight, z.left.n.min));
+      res = Math.min(res, z.parent.weight);
+      last = z.left.n;
+    }
+    return res;
+  }
+}
+package Trees;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+
+// A custom heap that is backed by a hashmap and arraylist
+public class QriorityPueue<E> {
+  private int size;
+  private ArrayList<E> list;
+  private HashMap<E, Integer> pos;
+  private Comparator<E> comp;
+
+  public QriorityPueue(Comparator<E> comp) {
+    size = 0;
+    list = new ArrayList<E>();
+    pos = new HashMap<E, Integer>();
+    this.comp = comp;
+  }
+
+  public boolean add(E e) {
+    if (e == null)
+      throw new NullPointerException();
+    list.add(e);
+    pos.put(e, size);
+    bubbleUp(size, e);
+    size++;
+    return true;
+  }
+
+  public E poll() {
+    if (size == 0)
+      return null;
+    size--;
+    E ret = list.get(0);
+    pos.remove(ret);
+    E last = list.get(size);
+    list.remove(size);
+    if (size != 0)
+      bubbleDown(0, last);
+    return ret;
+  }
+
+  public E peek() {
+    if (size == 0)
+      return null;
+    return list.get(0);
+  }
+
+  public boolean updateKey(E e) {
+    Integer ps = pos.get(e);
+    if (ps == null)
+      return false;
+
+    // try moving it up and down
+    bubbleUp(ps, e);
+    ps = pos.get(e);
+    bubbleDown(ps, e);
+
+    return true;
+  }
+
+  public int size() {
+    return size;
+  }
+
+  public boolean isEmpty() {
+    return size == 0;
+  }
+
+  public boolean remove(E e) {
+    Integer ps = pos.get(e);
+    if (ps == null)
+      return false;
+    pos.remove(e);
+    size--;
+    E last = list.get(size);
+    if (size != 0)
+      bubbleDown(ps, last);
+    return true;
+  }
+
+  public boolean contains(E e) {
+    return pos.containsKey(e);
+  }
+
+  public Iterator<E> iterator() {
+    return list.iterator();
+  }
+
+  private void bubbleUp(int idx, E e) {
+    while (idx > 0) {
+      int par = (idx - 1) >> 1;
+      E toComp = list.get(par);
+      if (comp.compare(e, toComp) >= 0) // greater than parent
+        break;
+      list.set(idx, toComp);
+      pos.put(toComp, idx);
+      idx = par;
+    }
+    list.set(idx, e);
+    pos.put(e, idx);
+  }
+
+  private void bubbleDown(int idx, E e) {
+    int half = size >> 1;
+    while (idx < half) {
+      int next = (idx << 1) + 1, test = next + 1;
+      E toComp = list.get(next);
+      // get biggest child
+      if (test < size && comp.compare(toComp, list.get(test)) > 0)
+        toComp = list.get(next = test);
+      if (comp.compare(e, toComp) <= 0) // less than biggest child
+        break;
+      list.set(idx, toComp);
+      pos.put(toComp, idx);
+      idx = next;
+    }
+    list.set(idx, e);
+    pos.put(e, idx);
+  }
+}
+package Trees;
+
+public class RangeTree {
+    public int  start, end, num;
+    public RangeTree    child1  = null, child2 = null;
+    
+    public RangeTree (int start, int end) {
+        this.start = start;
+        this.end = end;
+        if (start != end) {
+            child1 = new RangeTree (start, (start + end) / 2);
+            child2 = new RangeTree ((start + end) / 2 + 1, end);
+        }
+    }
+    
+    public void insert (int ind) {
+        num++;
+        if (child1 == null)
+            return;
+        if (child1.end >= ind)
+            child1.insert (ind);
+        else
+            child2.insert (ind);
+    }
+    
+    public void delete (int ind) {
+        num--;
+        if (child1 == null)
+            return;
+        if (child1.end >= ind)
+            child1.delete (ind);
+        else
+            child2.delete (ind);
+    }
+    
+    public int query (int st, int en) {
+        if (start == st && end == en)
+            return num;
+        if (st > child1.end)
+            return child2.query (st, en);
+        if (en < child2.start)
+            return child1.query (st, en);
+        return child1.query (st, child1.end) + child2.query (child2.start, en);
+    }
+    
+}
+package Trees;
+
+// from Sedgewick
+public class SplayTree<Key extends Comparable<Key>, Value>  {
+
+    private Node root; 
+
+    private class Node {
+        private Key key;
+        private Value value;
+        private Node left, right;
+        
+        public Node(Key key, Value value) {
+            this.key   = key;
+            this.value = value;
+        }
+    }
+
+    public boolean contains(Key key) {
+        return (get(key) != null);
+    }
+
+    // return value associated with the given key
+    // if no such value, return null
+    public Value get(Key key) {
+        root = splay(root, key);
+        int cmp = key.compareTo(root.key);
+        if (cmp == 0) return root.value;
+        else          return null;
+    }
+
+    public void put(Key key, Value value) {
+        // splay key to root
+        if (root == null) {
+            root = new Node(key, value);
+            return;
+        }
+        
+        root = splay(root, key);
+
+        int cmp = key.compareTo(root.key);
+        
+        // Insert new node at root
+        if (cmp < 0) {
+            Node n = new Node(key, value);
+            n.left = root.left;
+            n.right = root;
+            root.left = null;
+            root = n;
+        }
+
+        // Insert new node at root
+        else if (cmp > 0) {
+            Node n = new Node(key, value);
+            n.right = root.right;
+            n.left = root;
+            root.right = null;
+            root = n;
+        }
+
+        // It was a duplicate key. Simply replace the value
+        else if (cmp == 0) {
+            root.value = value;
+        }
+
+    }
+    
+    public void remove(Key key) {
+        if (root == null) return; // empty tree
+        
+        root = splay(root, key);
+
+        int cmp = key.compareTo(root.key);
+        
+        if (cmp == 0) {
+            if (root.left == null) {
+                root = root.right;
+            } 
+            else {
+                Node x = root.right;
+                root = root.left;
+                splay(root, key);
+                root.right = x;
+            }
+        }
+
+        // else: it wasn't in the tree to remove
+    }
+    
+    private Node splay(Node h, Key key) {
+        if (h == null) return null;
+
+        int cmp1 = key.compareTo(h.key);
+
+        if (cmp1 < 0) {
+            if (h.left == null) {
+                return h;
+            }
+            int cmp2 = key.compareTo(h.left.key);
+            if (cmp2 < 0) {
+                h.left.left = splay(h.left.left, key);
+                h = rotateRight(h);
+            }
+            else if (cmp2 > 0) {
+                h.left.right = splay(h.left.right, key);
+                if (h.left.right != null)
+                    h.left = rotateLeft(h.left);
+            }
+            
+            if (h.left == null) return h;
+            else                return rotateRight(h);
+        }
+
+        else if (cmp1 > 0) { 
+            if (h.right == null) {
+                return h;
+            }
+
+            int cmp2 = key.compareTo(h.right.key);
+            if (cmp2 < 0) {
+                h.right.left  = splay(h.right.left, key);
+                if (h.right.left != null)
+                    h.right = rotateRight(h.right);
+            }
+            else if (cmp2 > 0) {
+                h.right.right = splay(h.right.right, key);
+                h = rotateLeft(h);
+            }
+            
+            if (h.right == null) return h;
+            else                 return rotateLeft(h);
+        }
+
+        else return h;
+    }
+    
+    // height of tree (1-node tree has height 0)
+    public int height() { return height(root); }
+    private int height(Node x) {
+        if (x == null) return -1;
+        return 1 + Math.max(height(x.left), height(x.right));
+    }
+
+    
+    public int size() {
+        return size(root);
+    }
+    
+    private int size(Node x) {
+        if (x == null) return 0;
+        else return (1 + size(x.left) + size(x.right));
+    }
+    
+    // right rotate
+    private Node rotateRight(Node h) {
+        Node x = h.left;
+        h.left = x.right;
+        x.right = h;
+        return x;
+    }
+
+    // left rotate
+    private Node rotateLeft(Node h) {
+        Node x = h.right;
+        h.right = x.left;
+        x.left = h;
+        return x;
+    }
+}
+package Trees;
+
+public class SplayTree2 {
+  static class Node {
+    int size;
+    Node left;
+    Node right;
+    Node parent;
+    boolean flip;
+    char id;
+
+    public Node(char id) {
+      this.id = id;
+      this.size = 1;
+      left = null;
+      right = null;
+      parent = null;
+    }
+
+    public String toString() {
+      return id + " " + size;
+    }
+  }
+
+  static void push(Node x) {
+    if (!x.flip)
+      return;
+    x.flip = false;
+    Node t = x.left;
+    x.left = x.right;
+    x.right = t;
+    if (x.left != null)
+      x.left.flip = !x.left.flip;
+    if (x.right != null)
+      x.right.flip = !x.right.flip;
+    join(x);
+  }
+
+  // Whether x is a root of a splay tree
+  static boolean isRoot(Node x) {
+    return x.parent == null;
+  }
+
+  static void connect(Node ch, Node p, boolean leftChild) {
+    if (leftChild)
+      p.left = ch;
+    else
+      p.right = ch;
+    join(p);
+    if (ch != null) {
+      ch.parent = p;
+    }
+  }
+
+  // rotate edge (x, x.parent)
+  static void rotate(Node x) {
+    Node p = x.parent;
+    Node g = p.parent;
+    boolean isRootP = isRoot(p);
+    boolean leftChildX = (x == p.left);
+
+    Node next = leftChildX ? x.right : x.left;
+    connect(next, p, leftChildX);
+    connect(p, x, !leftChildX);
+
+    if (!isRootP)
+      connect(x, g, p == g.left);
+    else
+      x.parent = g;
+  }
+
+  static void splay(Node x) {
+    while (!isRoot(x)) {
+      Node p = x.parent;
+      Node g = p.parent;
+      if (!isRoot(p))
+        push(g);
+      push(p);
+      push(x);
+      if (!isRoot(p))
+        rotate((x == p.left) == (p == g.left) ? p : x);
+      rotate(x);
+    }
+    push(x);
+    root = x;
+  }
+
+  static Node cutLeft(Node x) {
+    Node ret = x.left;
+    if (ret != null) {
+      x.left.parent = null;
+      x.left = null;
+      join(x);
+    }
+    return ret;
+  }
+
+  static Node cutRight(Node x) {
+    Node ret = x.right;
+    if (ret != null) {
+      x.right.parent = null;
+      x.right = null;
+      join(x);
+    }
+    return ret;
+  }
+
+  static void join(Node x) {
+    x.size = (x.left == null ? 0 : x.left.size) + (x.right == null ? 0 : x.right.size) + 1;
+  }
+
+  private static Node getElementAtPosition(Node start, int a) {
+    Node cur = start;
+    while (a > 0) {
+      push(cur);
+      int sz = (cur.left == null ? 0 : cur.left.size);
+      if (a <= sz) {
+        cur = cur.left;
+        continue;
+      }
+      a -= sz + 1;
+      if (a == 0)
+        break;
+      cur = cur.right;
+    }
+    splay(cur);
+    return cur;
+  }
+
+  private static char getElement(int a) {
+    return getElementAtPosition(root, a).id;
+  }
+
+  private static void flip(int a, int b) {
+    if (a == b)
+      return;
+    Node right = getElementAtPosition(root, b);
+    Node ra = cutRight(right);
+    Node left = getElementAtPosition(root, a);
+    Node la = cutLeft(left);
+    splay(left);
+    left.flip = !left.flip;
+    push(left);
+    connect(ra, left, false);
+    splay(right);
+    connect(la, right, true);
+  }
+
+  private static String s;
+  private static Node initRec(int start, int end) {
+    if (start == end) {
+      return new Node(s.charAt(start - 1));
+    }
+    int mid = (start + end) >> 1;
+    Node x = new Node(s.charAt(mid - 1));
+    if (start <= mid - 1)
+      connect(initRec(start, mid - 1), x, true);
+    if (mid + 1 <= end)
+      connect(initRec(mid + 1, end), x, false);
+    return x;
+  }
+
+  private static Node root;
+}
