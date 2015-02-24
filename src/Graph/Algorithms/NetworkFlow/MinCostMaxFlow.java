@@ -1,9 +1,10 @@
 package Graph.Algorithms.NetworkFlow;
 
 import java.util.Arrays;
-import static Graph.Representation.AdjacencyMatrix.*;
 
 public class MinCostMaxFlow {
+  public static int N;
+  public static int INF = 1 << 29;
   private static int[][] cap, cost;
   private static int[] pot;
 

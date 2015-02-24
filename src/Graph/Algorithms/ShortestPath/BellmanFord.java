@@ -1,14 +1,20 @@
 package Graph.Algorithms.ShortestPath;
 
-import static Graph.Representation.EdgeList.*;
-import Graph.Triplet;
-
 public class BellmanFord {
-  private static Triplet[] edges;
+  public static int INF = 1 << 29;
+  static class Edge {
+    public int from, to, weight;
+    public Edge(int from, int to, int weight) {
+      this.from = from;
+      this.to = to;
+      this.weight = weight;
+    }
+  }
 
-  private static int[] bellman_ford(int[] dist, int start) {
-    // IMPORTANT: use this if and only if there are negative path values
-    // this is the only way to process them
+  private static int[] bellman_ford(Edge[] edges, int[] dist, int start) {
+    int N = dist.length;
+    int M = edges.length;
+    
     int[] prev = new int[N];
     for (int i = 0; i < N; i++) {
       dist[i] = INF;
@@ -16,14 +22,13 @@ public class BellmanFord {
     }
 
     dist[start] = 0;
-    // shortest non-cyclic path is at most length N
     for (int i = 0; i < N; i++) {
       boolean changed = false;
 
       for (int j = 0; j < M; j++)
-        if (dist[edges[j].a] + edges[j].c < dist[edges[j].b]) {
-          dist[edges[j].b] = dist[edges[j].a] + edges[j].c;
-          prev[edges[j].b] = edges[j].a;
+        if (dist[edges[j].from] + edges[j].weight < dist[edges[j].to]) {
+          dist[edges[j].to] = dist[edges[j].from] + edges[j].weight;
+          prev[edges[j].to] = edges[j].from;
           changed = true;
         }
 
@@ -31,12 +36,10 @@ public class BellmanFord {
         break;
     }
 
-    // if we can make a path shorter, there exists a negative cycle
     for (int i = 0; i < M; i++)
-      if (dist[edges[i].b] > dist[edges[i].a] + edges[i].c)
-        return null; // negative cycle
+      if (dist[edges[i].to] > dist[edges[i].from] + edges[i].weight)
+        return null;
 
-    return prev; // no cycles, parent pointers to recreate path
-    // replace this with true/false if you don't care about parent pointers
+    return prev;
   }
 }
