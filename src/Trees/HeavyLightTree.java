@@ -15,7 +15,7 @@ public class HeavyLightTree {
     index = new int[MAXN];
     chains = new int[MAXN];
     emp = new Edge[MAXN];
-    g = new Graph (MAXN, MAXN - 1);
+    g = new Graph(MAXN, MAXN - 1);
   }
 
   static class Graph {
@@ -29,9 +29,9 @@ public class HeavyLightTree {
       elast = new int[N];
       reset();
     }
-    
+
     public void reset() {
-      Arrays.fill (elast, -1);
+      Arrays.fill(elast, -1);
       eidx = 0;
     }
 
@@ -150,7 +150,7 @@ public class HeavyLightTree {
     whchain[node] = widx;
     index[node] = cidx;
     chains[cidx++] = node;
-    
+
     if (bestchild[node] == -1)
       return;
     dfs1(bestchild[node], node);
@@ -165,6 +165,7 @@ public class HeavyLightTree {
   }
 
   public static SegmentTree root;
+
   public static void init() {
     dfs0(0, -1);
     for (int i = 1; i < 15; i++) {
@@ -230,7 +231,9 @@ public class HeavyLightTree {
     Edge e = emp[x];
     int a = e.a, b = e.b;
     if (depth[a] < depth[b]) {
-      int t = a; a = b; b = t;
+      int t = a;
+      a = b;
+      b = t;
     }
     root.update(index[b], c);
   }

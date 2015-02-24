@@ -8,15 +8,20 @@ public class ZAlgorithm {
     for (int i = 1; i < N; i++) {
       if (i > R) {
         L = R = i;
-        while (R < N && let[R-L] == let[R]) R++;
-        z[i] = R-L; R--;
+        while (R < N && let[R - L] == let[R])
+          R++;
+        z[i] = R - L;
+        R--;
       } else {
-        int k = i-L;
-        if (z[k] < R-i+1) z[i] = z[k];
+        int k = i - L;
+        if (z[k] < R - i + 1)
+          z[i] = z[k];
         else {
           L = i;
-          while (R < N && let[R-L] == let[R]) R++;
-          z[i] = R-L; R--;
+          while (R < N && let[R - L] == let[R])
+            R++;
+          z[i] = R - L;
+          R--;
         }
       }
     }

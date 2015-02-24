@@ -147,6 +147,7 @@ public class SplayTree2 {
   }
 
   private static String s;
+
   private static Node initRec(int start, int end) {
     if (start == end) {
       return new Node(s.charAt(start - 1));

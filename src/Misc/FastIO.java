@@ -12,7 +12,7 @@ public class FastIO {
     private byte[] buffer;
     private int bufferPointer, bytesRead;
 
-    
+
     public Reader() {
       din = new DataInputStream(System.in);
       buffer = new byte[BUFFER_SIZE];
@@ -24,7 +24,7 @@ public class FastIO {
       buffer = new byte[BUFFER_SIZE];
       bufferPointer = bytesRead = 0;
     }
-    
+
     public Reader(InputStream in) throws IOException {
       din = new DataInputStream(in);
       buffer = new byte[BUFFER_SIZE];
@@ -42,7 +42,7 @@ public class FastIO {
       } while ((c = read()) != '\n');
       return new String(buf, 0, cnt);
     }
-    
+
     public String next() throws IOException {
       byte[] buf = new byte[1 << 20];
       int cnt = 0;

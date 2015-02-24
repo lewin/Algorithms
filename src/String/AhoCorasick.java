@@ -2,7 +2,7 @@ package String;
 
 import java.util.Arrays;
 
-//taken from here: https://sites.google.com/site/indy256/algo/aho_corasick
+// taken from here: https://sites.google.com/site/indy256/algo/aho_corasick
 public class AhoCorasick {
   static final int ALPHABET_SIZE = 26;
 
@@ -60,7 +60,9 @@ public class AhoCorasick {
     int c = ch - 'a';
     Node node = nodes[nodeIndex];
     if (node.transitions[c] == -1)
-    node.transitions[c] = node.children[c] != -1 ? node.children[c] : (nodeIndex == 0 ? 0 : transition(suffLink(nodeIndex), ch));
+      node.transitions[c] =
+          node.children[c] != -1 ? node.children[c] : (nodeIndex == 0 ? 0 : transition(
+              suffLink(nodeIndex), ch));
     return node.transitions[c];
   }
 }
