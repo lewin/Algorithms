@@ -3,7 +3,7 @@ package Algebra;
 public final class Complex {
   public static final Complex ZERO = new Complex(0, 0);
   public double real, imag;
-
+d 
   public Complex(double real, double imag) {
     this.real = real;
     this.imag = imag;
